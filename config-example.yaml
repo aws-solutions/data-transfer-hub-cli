@@ -1,0 +1,28 @@
+srcType: Amazon_S3
+srcBucket: src-bucket
+srcPrefix:
+srcRegion: us-west-2
+srcEndpoint:
+srcCredential: src
+srcInCurrentAccount: false
+
+destBucket: dest-bucket
+destPrefix:
+destRegion: cn-north-1
+destCredential:
+destStorageClass: STANDARD
+destInCurrentAccount: true
+destAcl: bucket-owner-full-control
+
+jobTableName: test-table
+jobQueueName: test-queue
+
+options:
+  chunkSize: 5
+  multipartThreshold: 10
+  maxKeys: 1000
+  messageBatchSize: 10
+  finderDepth: 0
+  finderNumber: 1
+  workerNumber: 4
+  includeMetadata: false

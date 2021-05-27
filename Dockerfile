@@ -1,6 +1,6 @@
 FROM amazonlinux:latest as builder
 
-RUN yum update && yum install -y tar gzip
+RUN yum update -y && yum install -y tar gzip
 
 RUN cd /tmp && \
     curl -LO https://golang.org/dl/go1.16.4.linux-amd64.tar.gz && \
@@ -12,6 +12,8 @@ COPY . .
 RUN PATH=$PATH:/usr/local/go/bin GOPROXY=https://goproxy.io,direct GOOS=linux go build -o dthcli .
 
 FROM amazonlinux:latest
+
+RUN yum update -y
 
 ENV SOURCE_TYPE Amazon_S3
 

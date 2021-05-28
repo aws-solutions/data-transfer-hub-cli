@@ -1,3 +1,6 @@
+[![Go Report Card](https://goreportcard.com/badge/github.com/aws-samples/data-transfer-hub-cli)](https://goreportcard.com/report/github.com/aws-samples/data-transfer-hub-cli)
+
+
 # data-transfer-hub-cli
 
 dthcli (short for data-transfer-hub-cli) is a distributed tool to transfer data to Amazon S3 from other cloud storage services (including Aliyun OSS, Tencent COS, Qiniu Kodo, etc.) or between AWS regions (cross partition).
@@ -9,7 +12,22 @@ This tool leverages Amazon SQS to distribute the transfer processes in many work
 
 ## Installation
 
-You can clone this repo and build by yourself (Go Version >= v1.16)
+Download the tool from [Release](https://github.com/aws-samples/data-transfer-hub-cli/releases) page.
+
+For example, on Linux:
+```
+release=1.0.2
+curl -LO "https://github.com/aws-samples/data-transfer-hub-cli/releases/download/v${release}/dthcli_${release}_linux_386.tar.gz"
+tar zxvf dthcli_${release}_linux_386.tar.gz
+```
+
+To verify, simply run `./dthcli version`
+```
+$ ./dthcli version
+drhcli version vX.Y.Z
+```
+
+> Or you can clone this repo and build (go build) by yourself (Go Version >= v1.16)
 
 
 ## Prerequisites

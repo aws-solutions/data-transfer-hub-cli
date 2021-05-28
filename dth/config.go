@@ -16,6 +16,16 @@ limitations under the License.
 
 package dth
 
+import (
+	"context"
+	"log"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	mw "github.com/aws/aws-sdk-go-v2/aws/middleware"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/smithy-go/middleware"
+)
+
 const (
 	// MaxRetries when failed used globally
 	// No need an option of this.
@@ -61,4 +71,19 @@ type JobConfig struct {
 	JobTableName, JobQueueName                                                    string
 	SrcInCurrentAccount, DestInCurrentAccount                                     bool
 	*JobOptions
+}
+
+// loadDefaultConfig reads the SDK's default external configurations with custom user agent for API tracking purpose
+func loadDefaultConfig(ctx context.Context) (cfg aws.Config) {
+	cfg, err := config.LoadDefaultConfig(
+		ctx,
+		// config.WithClientLogMode(aws.LogRequest|aws.LogRequestWithBody),
+		config.WithAPIOptions([]func(*middleware.Stack) error{
+			mw.AddUserAgentKey("AWS/SO8001/v2.0.0"),
+		}),
+	)
+	if err != nil {
+		log.Fatalf("Failed to load default SDK config to create client - %s\n", err.Error())
+	}
+	return cfg
 }

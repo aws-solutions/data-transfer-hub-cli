@@ -28,7 +28,6 @@ import (
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -85,13 +84,9 @@ func getEndpointURL(region, sourceType string) (url string) {
 // NewS3Client creates a S3Client instance
 func NewS3Client(ctx context.Context, bucket, prefix, endpoint, region, sourceType string, cred *S3Credentials) *S3Client {
 
-	// config, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
-	config, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		log.Fatalf("Failed to load default SDK config to create S3 client - %s\n", err.Error())
-	}
+	cfg := loadDefaultConfig(ctx)
 
-	client := s3.NewFromConfig(config, func(o *s3.Options) {
+	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		// retryer := retry.AddWithMaxBackoffDelay(retry.NewStandard(), time.Second*5)
 		// o.Retryer = retryer
 		if region != "" {

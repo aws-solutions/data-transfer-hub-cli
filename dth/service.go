@@ -23,7 +23,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	dtype "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
@@ -60,12 +59,8 @@ type SecretService struct {
 
 // NewSecretService is a helper func to create a SecretService instance
 func NewSecretService(ctx context.Context) (*SecretService, error) {
-	cfg, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		// Don't need to quit the process
-		log.Printf("Failed to load default SDK config to create SSM client - %s\n", err.Error())
-		return nil, err
-	}
+
+	cfg := loadDefaultConfig(ctx)
 
 	// Create an Amazon DynamoDB client.
 	client := sm.NewFromConfig(cfg)
@@ -77,10 +72,8 @@ func NewSecretService(ctx context.Context) (*SecretService, error) {
 
 // NewDBService is a helper func to create a DBService instance
 func NewDBService(ctx context.Context, tableName string) (*DBService, error) {
-	cfg, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		log.Fatalf("Failed to load default SDK config to create DynamoDB client - %s\n", err.Error())
-	}
+
+	cfg := loadDefaultConfig(ctx)
 
 	// Create an Amazon DynamoDB client.
 	client := dynamodb.NewFromConfig(cfg)
@@ -94,11 +87,7 @@ func NewDBService(ctx context.Context, tableName string) (*DBService, error) {
 // NewSqsService is a helper func to create a SqsService instance
 func NewSqsService(ctx context.Context, queueName string) (*SqsService, error) {
 
-	// Only to use default config here
-	cfg, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		log.Fatalf("Failed to load default SDK config to create SQS client - %s\n", err.Error())
-	}
+	cfg := loadDefaultConfig(ctx)
 
 	client := sqs.NewFromConfig(cfg)
 	input := &sqs.GetQueueUrlInput{

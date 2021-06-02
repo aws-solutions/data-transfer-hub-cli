@@ -490,7 +490,7 @@ func (c *S3Client) ListParts(ctx context.Context, key, uploadID *string) (parts 
 		output, err := c.client.ListParts(ctx, input)
 		if err != nil {
 			log.Printf("Failed to list parts for %s - %s\n", *key, err.Error())
-			// return nil
+			break
 		}
 
 		for _, part := range output.Parts {

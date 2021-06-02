@@ -172,11 +172,13 @@ func (f *Finder) Run(ctx context.Context) {
 func (f *Finder) getTargetObjects(ctx context.Context, prefix *string) (objects map[string]*int64) {
 
 	destPrefix := appendPrefix(prefix, &f.cfg.DestPrefix)
-	// log.Printf("Getting target list in destination prefix /%s\n", *destPrefix)
+	log.Printf("Scanning in destination prefix /%s\n", *destPrefix)
 
 	token := ""
 	objects = make(map[string]*int64, 1<<17)
 
+	i := 0
+	batch := 10
 	for token != "End" {
 		tar, err := f.desClient.ListObjects(ctx, &token, destPrefix, f.cfg.MaxKeys)
 		if err != nil {
@@ -190,6 +192,10 @@ func (f *Finder) getTargetObjects(ctx context.Context, prefix *string) (objects 
 			srcKey := removePrefix(&obj.Key, &f.cfg.DestPrefix)
 			objects[*srcKey] = &obj.Size
 		}
+		i++
+		if (i % batch) == 0 {
+			log.Printf("Scanned %d objects...", i*1000)
+		}
 	}
 	log.Printf("Totally %d objects in destination prefix /%s\n", len(objects), *destPrefix)
 	return
@@ -200,7 +206,7 @@ func (f *Finder) getTargetObjects(ctx context.Context, prefix *string) (objects 
 func (f *Finder) compareAndSend(ctx context.Context, prefix *string, batchCh chan struct{}, msgCh chan *string, compareCh chan struct{}, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	log.Printf("Comparing in source prefix /%s\n", *prefix)
+	log.Printf("Comparing within prefix /%s\n", *prefix)
 	target := f.getTargetObjects(ctx, prefix)
 
 	token := ""

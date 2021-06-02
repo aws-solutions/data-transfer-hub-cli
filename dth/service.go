@@ -18,6 +18,7 @@ package dth
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"strconv"
@@ -268,7 +269,7 @@ func (ss *SqsService) IsQueueEmpty(ctx context.Context) (isEmpty bool) {
 }
 
 // GetSecret is a function to read the value of a secret in Secrets Manager
-func (s *SecretService) GetSecret(ctx context.Context, secretName *string) *string {
+func (s *SecretService) GetSecret(ctx context.Context, secretName *string) (value *string) {
 	log.Printf("Get secret Value of %s from Secrets Manager\n", *secretName)
 
 	input := &sm.GetSecretValueInput{
@@ -279,7 +280,20 @@ func (s *SecretService) GetSecret(ctx context.Context, secretName *string) *stri
 		log.Printf("Error getting secret Value of %s from Secrets Manager - %s", *secretName, err.Error())
 		return nil
 	}
-	return output.SecretString
+
+	if output.SecretString != nil {
+		value = output.SecretString
+	} else {
+		decodedBinarySecretBytes := make([]byte, base64.StdEncoding.DecodedLen(len(output.SecretBinary)))
+		len, err := base64.StdEncoding.Decode(decodedBinarySecretBytes, output.SecretBinary)
+		if err != nil {
+			log.Println("Error decoding Binary Secret - ", err)
+			return
+		}
+		decodedBinarySecret := string(decodedBinarySecretBytes[:len])
+		value = &decodedBinarySecret
+	}
+	return
 }
 
 // PutItem is a function to creates a new item, or replaces an old item with a new item in DynamoDB

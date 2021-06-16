@@ -611,12 +611,12 @@ func (w *Worker) getTotalParts(size int64) (totalParts, chunkSize int) {
 	maxParts := 10000
 
 	chunkSize = w.cfg.ChunkSize * MB
-	totalParts = int(math.Ceil(float64(size) / float64(chunkSize)))
 
-	if totalParts > maxParts {
-		totalParts = maxParts
-		chunkSize = int(size/int64(maxParts)) + 1024
+	if int64(maxParts*chunkSize) < size {
+		chunkSize = int(size/int64(maxParts)) + 1
 	}
+	totalParts = int(math.Ceil(float64(size) / float64(chunkSize)))
+	// log.Printf("Total parts: %d, chunk size: %d", totalParts, chunkSize)
 	return
 }
 
@@ -722,6 +722,7 @@ func (w *Worker) transfer(ctx context.Context, obj *Object, destKey *string, sta
 		etag, err = w.desClient.PutObject(ctx, destKey, body, &w.cfg.DestStorageClass, &w.cfg.DestAcl, meta)
 	}
 
+	body = nil // release memory
 	if err != nil {
 		return &TransferResult{
 			status: "ERROR",

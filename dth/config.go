@@ -79,7 +79,7 @@ func loadDefaultConfig(ctx context.Context) (cfg aws.Config) {
 		ctx,
 		// config.WithClientLogMode(aws.LogRequest|aws.LogRequestWithBody),
 		config.WithAPIOptions([]func(*middleware.Stack) error{
-			mw.AddUserAgentKey("AWS/SO8001/v2.0.0"),
+			mw.AddUserAgentKey("AWSSOLUTION/SO8001/v2.0.0"),
 		}),
 	)
 	if err != nil {

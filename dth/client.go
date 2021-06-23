@@ -268,15 +268,18 @@ func (c *S3Client) ListObjects(ctx context.Context, continuationToken, prefix *s
 		return nil, err
 	}
 
-	len := len(output.Contents)
-	result := make([]*Object, len, len)
+	length := len(output.Contents)
+	result := make([]*Object, 0, length)
 
-	for i, obj := range output.Contents {
+	for _, obj := range output.Contents {
 		// log.Printf("key=%s size=%d", *obj.Key, obj.Size)
-		result[i] = &Object{
+		if obj.StorageClass == "GLACIER" || obj.StorageClass == "DEEP_ARCHIVE" {
+			continue
+		}
+		result = append(result, &Object{
 			Key:  *obj.Key,
 			Size: obj.Size,
-		}
+		})
 	}
 
 	return result, nil

@@ -113,8 +113,8 @@ func NewFinder(ctx context.Context, cfg *JobConfig) (f *Finder) {
 	srcCred := getCredentials(ctx, cfg.SrcCredential, cfg.SrcInCurrentAccount, sm)
 	desCred := getCredentials(ctx, cfg.DestCredential, cfg.DestInCurrentAccount, sm)
 
-	srcClient := NewS3Client(ctx, cfg.SrcBucket, cfg.SrcPrefix, cfg.SrcEndpoint, cfg.SrcRegion, cfg.SrcType, srcCred)
-	desClient := NewS3Client(ctx, cfg.DestBucket, cfg.DestPrefix, "", cfg.DestRegion, "Amazon_S3", desCred)
+	srcClient := NewS3Client(ctx, cfg.SrcBucket, cfg.SrcPrefix, cfg.SrcPrefixList, cfg.SrcEndpoint, cfg.SrcRegion, cfg.SrcType, srcCred)
+	desClient := NewS3Client(ctx, cfg.DestBucket, cfg.DestPrefix, "", "", cfg.DestRegion, "Amazon_S3", desCred)
 
 	f = &Finder{
 		srcClient: srcClient,
@@ -147,14 +147,21 @@ func (f *Finder) Run(ctx context.Context) {
 	// Note that bigger number needs more memory
 	compareCh := make(chan struct{}, f.cfg.FinderNumber)
 
-	prefixes := f.srcClient.ListCommonPrefixes(ctx, f.cfg.FinderDepth, f.cfg.MaxKeys)
+	var prefixes []*string
+	log.Printf("Prefix List File: %s", f.cfg.SrcPrefixList)
 
+	if len(f.cfg.SrcPrefixList) > 0 {
+		prefixes = f.srcClient.ListSelectedPrefixes(ctx, &f.cfg.SrcPrefixList)
+	} else {
+		prefixes = f.srcClient.ListCommonPrefixes(ctx, f.cfg.FinderDepth, f.cfg.MaxKeys)
+	}
 	var wg sync.WaitGroup
 
 	start := time.Now()
 
 	for _, p := range prefixes {
 		compareCh <- struct{}{}
+		log.Printf("prefix: %s", *p)
 		wg.Add(1)
 		go f.compareAndSend(ctx, p, batchCh, msgCh, compareCh, &wg)
 	}
@@ -310,8 +317,8 @@ func NewWorker(ctx context.Context, cfg *JobConfig) (w *Worker) {
 	srcCred := getCredentials(ctx, cfg.SrcCredential, cfg.SrcInCurrentAccount, sm)
 	desCred := getCredentials(ctx, cfg.DestCredential, cfg.DestInCurrentAccount, sm)
 
-	srcClient := NewS3Client(ctx, cfg.SrcBucket, cfg.SrcPrefix, cfg.SrcEndpoint, cfg.SrcRegion, cfg.SrcType, srcCred)
-	desClient := NewS3Client(ctx, cfg.DestBucket, cfg.DestPrefix, "", cfg.DestRegion, "Amazon_S3", desCred)
+	srcClient := NewS3Client(ctx, cfg.SrcBucket, cfg.SrcPrefix, cfg.SrcPrefixList, cfg.SrcEndpoint, cfg.SrcRegion, cfg.SrcType, srcCred)
+	desClient := NewS3Client(ctx, cfg.DestBucket, cfg.DestPrefix, "", "", cfg.DestRegion, "Amazon_S3", desCred)
 
 	return &Worker{
 		srcClient: srcClient,

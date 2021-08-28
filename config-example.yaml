@@ -5,6 +5,7 @@ srcRegion: us-west-2
 srcEndpoint:
 srcCredential: src
 srcInCurrentAccount: false
+skipCompare: false
 
 destBucket: dest-bucket
 destPrefix:

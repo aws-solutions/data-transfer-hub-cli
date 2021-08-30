@@ -26,9 +26,11 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
@@ -42,6 +44,7 @@ type Client interface {
 	ListCommonPrefixes(ctx context.Context, depth int, maxKeys int32) (prefixes []*string)
 	ListParts(ctx context.Context, key, uploadID *string) (parts map[int]*Part)
 	GetUploadID(ctx context.Context, key *string) (uploadID *string)
+	ListSelectedPrefixes(ctx context.Context, key *string) (prefixes []*string)
 
 	// WRITE
 	PutObject(ctx context.Context, key *string, body []byte, storageClass, acl *string, meta *Metadata) (etag *string, err error)
@@ -54,8 +57,8 @@ type Client interface {
 
 // S3Client is an implementation of Client interface for Amazon S3
 type S3Client struct {
-	bucket, prefix, region, sourceType string
-	client                             *s3.Client
+	bucket, prefix, prefixList, region, sourceType string
+	client                                         *s3.Client
 }
 
 // S3Credentials is
@@ -82,7 +85,7 @@ func getEndpointURL(region, sourceType string) (url string) {
 }
 
 // NewS3Client creates a S3Client instance
-func NewS3Client(ctx context.Context, bucket, prefix, endpoint, region, sourceType string, cred *S3Credentials) *S3Client {
+func NewS3Client(ctx context.Context, bucket, prefix, prefixList, endpoint, region, sourceType string, cred *S3Credentials) *S3Client {
 
 	cfg := loadDefaultConfig(ctx)
 
@@ -122,6 +125,7 @@ func NewS3Client(ctx context.Context, bucket, prefix, endpoint, region, sourceTy
 	return &S3Client{
 		bucket:     bucket,
 		prefix:     prefix,
+		prefixList: prefixList,
 		client:     client,
 		region:     region,
 		sourceType: sourceType,
@@ -309,6 +313,46 @@ func (c *S3Client) HeadObject(ctx context.Context, key *string) *Metadata {
 		Metadata:        output.Metadata,
 	}
 
+}
+
+// ListSelectedPrefixes is a function to list prefixes from a customized list file.
+func (c *S3Client) ListSelectedPrefixes(ctx context.Context, key *string) (prefixes []*string) {
+
+	downloader := manager.NewDownloader(c.client)
+
+	getBuf := manager.NewWriteAtBuffer([]byte{})
+
+	input := &s3.GetObjectInput{
+		Bucket: &c.bucket,
+		Key:    key,
+	}
+
+	dounload_start := time.Now()
+	log.Printf("Start downloading the Prefix List File.")
+	_, err := downloader.Download(ctx, getBuf, input)
+	download_end := time.Since(dounload_start)
+	if err != nil {
+		fmt.Print(err)
+	} else {
+		log.Printf("Download the Prefix List File Completed in %v\n", download_end)
+	}
+	start := time.Now()
+	prefixes_value := make([]string, 0, 100000000)
+
+	for i, m := range strings.Split(string(getBuf.Bytes()), "\n") {
+		if i > 100000000 {
+			log.Printf("The number of prefixes in the list file is larger than 100,000,000, please seperate the file.")
+			return
+		}
+		if len(m) > 0 {
+			prefixes_value = append(prefixes_value, m)
+			prefixes = append(prefixes, &prefixes_value[i])
+		}
+	}
+	log.Printf("Got %d prefixes from the customized list file.", len(prefixes))
+	end := time.Since(start)
+	log.Printf("Getting Prefixes List Job Completed in %v\n", end)
+	return
 }
 
 // PutObject is a function to put (upload) an object to Amazon S3

@@ -71,6 +71,7 @@ func initConfig() {
 	viper.SetDefault("srcType", "Amazon_S3")
 	viper.SetDefault("destStorageClass", "STANDARD")
 	viper.SetDefault("srcPrefix", "")
+	viper.SetDefault("srcPrefixList", "")
 	viper.SetDefault("srcCredential", "")
 	viper.SetDefault("srcEndpoint", "")
 	viper.SetDefault("destPrefix", "")
@@ -89,10 +90,12 @@ func initConfig() {
 	viper.BindEnv("srcType", "SOURCE_TYPE")
 	viper.BindEnv("srcBucket", "SRC_BUCKET")
 	viper.BindEnv("srcPrefix", "SRC_PREFIX")
+	viper.BindEnv("srcPrefixList", "SRC_PREFIX_LIST")
 	viper.BindEnv("srcRegion", "SRC_REGION")
 	viper.BindEnv("srcEndpoint", "SRC_ENDPOINT")
 	viper.BindEnv("srcCredential", "SRC_CREDENTIALS")
-	viper.BindEnv("SrcInCurrentAccount", "SRC_IN_CURRENT_ACCOUNT")
+	viper.BindEnv("srcInCurrentAccount", "SRC_IN_CURRENT_ACCOUNT")
+	viper.BindEnv("skipCompare", "SKIP_COMPARE")
 
 	viper.BindEnv("destBucket", "DEST_BUCKET")
 	viper.BindEnv("destPrefix", "DEST_PREFIX")
@@ -146,10 +149,12 @@ func initConfig() {
 		SrcType:              viper.GetString("srcType"),
 		SrcBucket:            viper.GetString("srcBucket"),
 		SrcPrefix:            viper.GetString("srcPrefix"),
+		SrcPrefixList:        viper.GetString("srcPrefixList"),
 		SrcRegion:            viper.GetString("srcRegion"),
 		SrcEndpoint:          viper.GetString("srcEndpoint"),
 		SrcCredential:        viper.GetString("srcCredential"),
 		SrcInCurrentAccount:  viper.GetBool("srcInCurrentAccount"),
+		SkipCompare:          viper.GetBool("skipCompare"),
 		DestBucket:           viper.GetString("destBucket"),
 		DestPrefix:           viper.GetString("destPrefix"),
 		DestRegion:           viper.GetString("destRegion"),

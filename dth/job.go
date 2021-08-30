@@ -306,7 +306,7 @@ func (f *Finder) compareAndSend(ctx context.Context, prefix *string, batchCh cha
 	<-compareCh
 }
 
-// This function will send the task to SQS Queue directly, without comparation.
+// This function will send the task to SQS Queue directly, without comparison.
 func (f *Finder) directSend(ctx context.Context, prefix *string, batchCh chan struct{}, msgCh chan *string, compareCh chan struct{}, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -317,7 +317,7 @@ func (f *Finder) directSend(ctx context.Context, prefix *string, batchCh chan st
 	retry := 0
 	// batch := make([]*string, f.cfg.MessageBatchSize)
 
-	log.Printf("Start sending...\n")
+	log.Printf("Start sending without comparison ...\n")
 	// start := time.Now()
 
 	for token != "End" {

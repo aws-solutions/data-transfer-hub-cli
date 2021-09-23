@@ -86,6 +86,7 @@ func initConfig() {
 	viper.SetDefault("options.finderNumber", dth.DefaultFinderNumber)
 	viper.SetDefault("options.workerNumber", dth.DefaultWorkerNumber)
 	viper.SetDefault("options.includeMetadata", false)
+	viper.SetDefault("options.ignoreMissingObjects", false)
 
 	viper.BindEnv("srcType", "SOURCE_TYPE")
 	viper.BindEnv("srcBucket", "SRC_BUCKET")
@@ -135,14 +136,15 @@ func initConfig() {
 	}
 
 	options := &dth.JobOptions{
-		ChunkSize:          viper.GetInt("options.chunkSize"),
-		MultipartThreshold: viper.GetInt("options.multipartThreshold"),
-		MaxKeys:            viper.GetInt32("options.maxKeys"),
-		MessageBatchSize:   viper.GetInt("options.messageBatchSize"),
-		FinderDepth:        viper.GetInt("options.finderDepth"),
-		FinderNumber:       viper.GetInt("options.finderNumber"),
-		WorkerNumber:       viper.GetInt("options.workerNumber"),
-		IncludeMetadata:    viper.GetBool("options.includeMetadata"),
+		ChunkSize:            viper.GetInt("options.chunkSize"),
+		MultipartThreshold:   viper.GetInt("options.multipartThreshold"),
+		MaxKeys:              viper.GetInt32("options.maxKeys"),
+		MessageBatchSize:     viper.GetInt("options.messageBatchSize"),
+		FinderDepth:          viper.GetInt("options.finderDepth"),
+		FinderNumber:         viper.GetInt("options.finderNumber"),
+		WorkerNumber:         viper.GetInt("options.worker-Number"),
+		IncludeMetadata:      viper.GetBool("options.includeMetadata"),
+		IgnoreMissingObjects: viper.GetBool("options.ignoreMissingObjects"),
 	}
 
 	cfg = &dth.JobConfig{

@@ -455,6 +455,23 @@ func (w *Worker) Run(ctx context.Context) {
 			continue
 		}
 
+		if w.cfg.IgnoreMissingObjects {
+			// Delete message if object does not exist.
+			// This might happen if the object was deleted in the meantime.
+			meta := w.srcClient.HeadObject(ctx, &obj.Key)
+			if meta == nil {
+				log.Printf("Object not found %s/%s\n", w.cfg.SrcBucket, obj.Key)
+				res := &TransferResult{
+					status: "NOT_FOUND",
+					etag:   nil,
+					err:    nil,
+				}
+				w.db.UpdateItem(ctx, &obj.Key, res)
+				w.sqs.DeleteMessage(ctx, rh)
+				continue
+			}
+		}
+
 		destKey := appendPrefix(&obj.Key, &w.cfg.DestPrefix)
 
 		if action == Transfer {

@@ -27,6 +27,10 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aliyun/aliyun-oss-go-sdk/oss"
+
+	"fmt"
+	//"github.com/aws/aws-sdk-go-v2/aws"
 )
 
 const (
@@ -409,6 +413,8 @@ func NewWorker(ctx context.Context, cfg *JobConfig) (w *Worker) {
 	srcCred := getCredentials(ctx, cfg.SrcCredential, cfg.SrcInCurrentAccount, sm)
 	desCred := getCredentials(ctx, cfg.DestCredential, cfg.DestInCurrentAccount, sm)
 
+	//fmt.Println(srcCred)
+
 	srcClient := NewS3Client(ctx, cfg.SrcBucket, cfg.SrcPrefix, cfg.SrcPrefixList, cfg.SrcEndpoint, cfg.SrcRegion, cfg.SrcType, srcCred)
 	desClient := NewS3Client(ctx, cfg.DestBucket, cfg.DestPrefix, "", "", cfg.DestRegion, "Amazon_S3", desCred)
 
@@ -420,6 +426,57 @@ func NewWorker(ctx context.Context, cfg *JobConfig) (w *Worker) {
 		cfg:       cfg,
 	}
 }
+
+//++++++++++Customization Start++++++++++
+// Initialize aliyun oss client and oss bucket
+func InitializaOss(ctx context.Context, cfg *JobConfig) (*oss.Bucket, error) {
+        sm, err := NewSecretService(ctx)
+        if err != nil {
+                log.Printf("Unable to load credentials - %s\n", err.Error())
+        }
+        srcCred := getCredentials(ctx, cfg.SrcCredential, cfg.SrcInCurrentAccount, sm)
+        aliyun_endpoint := "https://oss-" + cfg.SrcRegion + ".aliyuncs.com"
+
+        // Initialize oss_client and oss_bucket
+        oss_client, err := oss.New(aliyun_endpoint, srcCred.accessKey, srcCred.secretKey)
+        if err != nil {
+                log.Printf("Unable to create oss_client - %s\n", err.Error())
+        }
+
+        oss_bucket, err := oss_client.Bucket(cfg.SrcBucket)
+        if err != nil {
+                log.Printf("Unable to create oss_bucket - %s\n", err.Error())
+        }
+
+	return oss_bucket, nil
+}
+
+// Restore Aliyun Glacier Object
+func RestoreObject(obj *Object, oss_bucket *oss.Bucket) error {
+	err := oss_bucket.RestoreObject(obj.Key)
+	if err != nil {
+		log.Printf("Unable to restore oss_key - %s\n", err.Error())
+	}
+
+	// Wait for restore completed
+	for {
+		meta, err := oss_bucket.GetObjectDetailedMeta(obj.Key)
+		if err != nil {
+			log.Printf("Unable to get object detailed meta - %s\n", err.Error())
+		}
+
+		// ongoing-request="false" means restoring object has completed.
+		if meta.Get("X-Oss-Restore") != "ongoing-request=\"true\"" {
+			fmt.Println("----------Restoring object completed.----------")
+			break
+		}
+
+		time.Sleep(10 * time.Second)
+	}
+
+	return nil
+}
+//++++++++++Customization End++++++++++
 
 // Run a Worker job
 func (w *Worker) Run(ctx context.Context) {
@@ -441,6 +498,12 @@ func (w *Worker) Run(ctx context.Context) {
 	// Buffer size is cfg.WorkerNumber * 2 - 1 (More buffer for multipart upload)
 	transferCh := make(chan struct{}, buffer*2-1)
 
+	// Initialize oss_bucket (Henry)
+	oss_bucket, err := InitializaOss(ctx, w.cfg)
+	if err != nil {
+		log.Printf("Unable to initialize oss_bucket - %s\n", err.Error())
+	}
+
 	for {
 		msg, rh := w.sqs.ReceiveMessages(ctx)
 
@@ -455,6 +518,17 @@ func (w *Worker) Run(ctx context.Context) {
 			continue
 		}
 
+		// Restore object (Henry)
+		//fmt.Println("======restore object======")
+		if obj.StorageClass == "GLACIER" {
+			fmt.Println("----------Start restoring object.----------")
+			err := RestoreObject(obj, oss_bucket)
+			//fmt.Printf("%T", obj.Key)
+			if err != nil {
+				log.Printf("Unable to restore obj - %s\n", err.Error())
+			}
+		}
+		
 		destKey := appendPrefix(&obj.Key, &w.cfg.DestPrefix)
 
 		if action == Transfer {
@@ -667,7 +741,9 @@ func (w *Worker) migrateBigFile(ctx context.Context, obj *Object, destKey *strin
 			meta = w.srcClient.HeadObject(ctx, &obj.Key)
 		}
 
-		uploadID, err = w.desClient.CreateMultipartUpload(ctx, destKey, &w.cfg.DestStorageClass, &w.cfg.DestAcl, meta)
+		//uploadID, err = w.desClient.CreateMultipartUpload(ctx, destKey, &w.cfg.DestStorageClass, &w.cfg.DestAcl, meta)
+		string_storageclass := string(obj.StorageClass) // Henry
+		uploadID, err = w.desClient.CreateMultipartUpload(ctx, destKey, &string_storageclass, &w.cfg.DestAcl, meta) // Henry
 		if err != nil {
 			log.Printf("Failed to create upload ID - %s for %s\n", err.Error(), *destKey)
 			return &TransferResult{
@@ -818,7 +894,9 @@ func (w *Worker) transfer(ctx context.Context, obj *Object, destKey *string, sta
 
 	} else {
 		log.Printf("----->Uploading %d Bytes to %s/%s\n", chunkSize, w.cfg.DestBucket, *destKey)
-		etag, err = w.desClient.PutObject(ctx, destKey, body, &w.cfg.DestStorageClass, &w.cfg.DestAcl, meta)
+		//etag, err = w.desClient.PutObject(ctx, destKey, body, &w.cfg.DestStorageClass, &w.cfg.DestAcl, meta)
+		string_storageclass := string(obj.StorageClass) // Henry
+		etag, err = w.desClient.PutObject(ctx, destKey, body, &string_storageclass, &w.cfg.DestAcl, meta) // Henry
 	}
 
 	body = nil // release memory

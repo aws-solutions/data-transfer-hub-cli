@@ -43,6 +43,7 @@ type Object struct {
 	Key       string `json:"key"`
 	Size      int64  `json:"size"`
 	Sequencer string `json:"sequencer,omitempty"`
+	StorageClass string `json:"storageclass,omitempty"` // Henry
 }
 
 // S3Event represents a basic structure of a S3 Event Message

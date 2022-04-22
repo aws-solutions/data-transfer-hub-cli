@@ -277,12 +277,14 @@ func (c *S3Client) ListObjects(ctx context.Context, continuationToken, prefix *s
 
 	for _, obj := range output.Contents {
 		// log.Printf("key=%s size=%d", *obj.Key, obj.Size)
-		if obj.StorageClass == "GLACIER" || obj.StorageClass == "DEEP_ARCHIVE" {
+		if obj.StorageClass == "DEEP_ARCHIVE" {
 			continue
 		}
+		//fmt.Printf("%T", string(obj.StorageClass))
 		result = append(result, &Object{
 			Key:  *obj.Key,
 			Size: obj.Size,
+			StorageClass: string(obj.StorageClass), // Henry
 		})
 	}
 

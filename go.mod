@@ -3,6 +3,7 @@ module golang.a2z.com/dthcli
 go 1.16
 
 require (
+	github.com/aliyun/aliyun-oss-go-sdk v2.2.2+incompatible // indirect
 	github.com/aws/aws-sdk-go-v2 v1.8.1
 	github.com/aws/aws-sdk-go-v2/config v1.6.1
 	github.com/aws/aws-sdk-go-v2/credentials v1.3.3

@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -173,6 +174,7 @@ func (c *S3Client) listObjectFn(ctx context.Context, continuationToken, prefix, 
 		Prefix:    prefix,
 		MaxKeys:   maxKeys,
 		Delimiter: delimiter,
+		EncodingType: "url",
 	}
 
 	if *continuationToken != "" {
@@ -280,8 +282,12 @@ func (c *S3Client) ListObjects(ctx context.Context, continuationToken, prefix *s
 		if obj.StorageClass == "GLACIER" || obj.StorageClass == "DEEP_ARCHIVE" {
 			continue
 		}
+		escapedPrefix, err := url.QueryUnescape(*obj.Key)
+		if err != nil {
+			escapedPrefix = *obj.Key
+		}
 		result = append(result, &Object{
-			Key:  *obj.Key,
+			Key:  escapedPrefix,
 			Size: obj.Size,
 		})
 	}

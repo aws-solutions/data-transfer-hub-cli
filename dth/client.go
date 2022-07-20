@@ -608,7 +608,3 @@ func (c *S3Client) AbortMultipartUpload(ctx context.Context, key, uploadID *stri
 
 	return nil
 }
-
-func urlEncodePath(path string) string {
-	return (&url.URL{Path: path}).EscapedPath()
-}

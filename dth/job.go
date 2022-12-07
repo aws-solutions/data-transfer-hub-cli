@@ -24,6 +24,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -129,7 +130,7 @@ func NewFinder(ctx context.Context, cfg *JobConfig) (f *Finder) {
 func (f *Finder) Run(ctx context.Context) {
 
 	if !f.sqs.IsQueueEmpty(ctx) {
-		log.Fatalf("Queue might not be empty or Unknown error... Please try again later")
+		log.Fatalf("Queue might not be empty ... Please try again later")
 	}
 
 	// Maximum number of queued batches to be sent to SQS
@@ -156,6 +157,7 @@ func (f *Finder) Run(ctx context.Context) {
 		prefixes = f.srcClient.ListCommonPrefixes(ctx, f.cfg.FinderDepth, f.cfg.MaxKeys)
 	}
 	var wg sync.WaitGroup
+	var total_obj_count int64 = 0
 
 	start := time.Now()
 
@@ -164,9 +166,9 @@ func (f *Finder) Run(ctx context.Context) {
 		log.Printf("prefix: %s", *p)
 		wg.Add(1)
 		if f.cfg.SkipCompare {
-			go f.directSend(ctx, p, batchCh, msgCh, compareCh, &wg)
+			go f.directSend(ctx, p, batchCh, msgCh, compareCh, &wg, &total_obj_count)
 		} else {
-			go f.compareAndSend(ctx, p, batchCh, msgCh, compareCh, &wg)
+			go f.compareAndSend(ctx, p, batchCh, msgCh, compareCh, &wg, &total_obj_count)
 		}
 	}
 	wg.Wait()
@@ -176,7 +178,7 @@ func (f *Finder) Run(ctx context.Context) {
 	close(compareCh)
 
 	end := time.Since(start)
-	log.Printf("Finder Job Completed in %v\n", end)
+	log.Printf("Finder Job Completed in %v, found %d objects in total\n", end, total_obj_count)
 }
 
 // List objects in destination bucket, load the full list into a map
@@ -214,7 +216,7 @@ func (f *Finder) getTargetObjects(ctx context.Context, prefix *string) (objects 
 
 // This function will compare source and target and get a list of delta,
 // and then send delta to SQS Queue.
-func (f *Finder) compareAndSend(ctx context.Context, prefix *string, batchCh chan struct{}, msgCh chan *string, compareCh chan struct{}, wg *sync.WaitGroup) {
+func (f *Finder) compareAndSend(ctx context.Context, prefix *string, batchCh chan struct{}, msgCh chan *string, compareCh chan struct{}, wg *sync.WaitGroup, total_obj_count *int64) {
 	defer wg.Done()
 
 	log.Printf("Comparing within prefix /%s\n", *prefix)
@@ -222,6 +224,7 @@ func (f *Finder) compareAndSend(ctx context.Context, prefix *string, batchCh cha
 
 	token := ""
 	i, j := 0, 0
+	var obj_count int64 = 0
 	retry := 0
 	// batch := make([]*string, f.cfg.MessageBatchSize)
 
@@ -261,6 +264,7 @@ func (f *Finder) compareAndSend(ctx context.Context, prefix *string, batchCh cha
 				i++
 				if i%f.cfg.MessageBatchSize == 0 {
 					wg.Add(1)
+					obj_count += int64(f.cfg.MessageBatchSize)
 					j++
 					if j%100 == 0 {
 						log.Printf("Found %d batches in prefix /%s\n", j, *prefix)
@@ -286,6 +290,7 @@ func (f *Finder) compareAndSend(ctx context.Context, prefix *string, batchCh cha
 	// For remainning objects.
 	if i != 0 {
 		j++
+		obj_count += int64(i)
 		wg.Add(1)
 		batchCh <- struct{}{}
 		go func(i int) {
@@ -299,21 +304,23 @@ func (f *Finder) compareAndSend(ctx context.Context, prefix *string, batchCh cha
 			<-batchCh
 		}(i)
 	}
+	atomic.AddInt64(total_obj_count, obj_count)
 
 	// end := time.Since(start)
 	// log.Printf("Compared and Sent %d batches in %v", j, end)
-	log.Printf("Completed in prefix /%s, found %d batches in total", *prefix, j)
+	log.Printf("Completed in prefix /%s, found %d batches (%d objects) in total", *prefix, j, obj_count)
 	<-compareCh
 }
 
 // This function will send the task to SQS Queue directly, without comparison.
-func (f *Finder) directSend(ctx context.Context, prefix *string, batchCh chan struct{}, msgCh chan *string, compareCh chan struct{}, wg *sync.WaitGroup) {
+func (f *Finder) directSend(ctx context.Context, prefix *string, batchCh chan struct{}, msgCh chan *string, compareCh chan struct{}, wg *sync.WaitGroup, total_obj_count *int64) {
 	defer wg.Done()
 
 	log.Printf("Scanning prefix /%s\n", *prefix)
 
 	token := ""
 	i, j := 0, 0
+	var obj_count int64 = 0
 	retry := 0
 	// batch := make([]*string, f.cfg.MessageBatchSize)
 
@@ -350,6 +357,7 @@ func (f *Finder) directSend(ctx context.Context, prefix *string, batchCh chan st
 			i++
 			if i%f.cfg.MessageBatchSize == 0 {
 				wg.Add(1)
+				obj_count += int64(f.cfg.MessageBatchSize)
 				j++
 				if j%100 == 0 {
 					log.Printf("Found %d batches in prefix /%s\n", j, *prefix)
@@ -374,6 +382,7 @@ func (f *Finder) directSend(ctx context.Context, prefix *string, batchCh chan st
 	// For remainning objects.
 	if i != 0 {
 		j++
+		obj_count += int64(i)
 		wg.Add(1)
 		batchCh <- struct{}{}
 		go func(i int) {
@@ -387,10 +396,11 @@ func (f *Finder) directSend(ctx context.Context, prefix *string, batchCh chan st
 			<-batchCh
 		}(i)
 	}
+	atomic.AddInt64(total_obj_count, obj_count)
 
 	// end := time.Since(start)
 	// log.Printf("Compared and Sent %d batches in %v", j, end)
-	log.Printf("Completed in prefix /%s, found %d batches in total", *prefix, j)
+	log.Printf("Completed in prefix /%s, found %d batches (%d objects) in total", *prefix, j, obj_count)
 	<-compareCh
 }
 

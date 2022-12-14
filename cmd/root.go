@@ -199,7 +199,6 @@ Supported types:
 		ctx := context.Background()
 
 		var job dth.Job
-
 		switch jobType {
 		case "Finder":
 			job = dth.NewFinder(ctx, cfg)
@@ -211,6 +210,7 @@ Supported types:
 			log.Fatalf("Unknown Job Type - %s. Type must be either Finder or Worker\n, please start again", jobType)
 
 		}
+		go dth.RunTicker(ctx, cfg)
 		job.Run(ctx)
 	},
 }

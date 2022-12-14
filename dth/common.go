@@ -33,6 +33,13 @@ var (
 	MB int = 1 << 20
 )
 
+// Global variables which are updated automatically every 02:00 a.m.
+// When calling a S3 API, the credentials of the client will be updated according to these two variables
+var (
+	SRC_CRED *S3Credentials
+	DST_CRED *S3Credentials
+)
+
 // Source is an interface represents a type of cloud storage services
 // type Source interface {
 // 	GetEndpointURL()

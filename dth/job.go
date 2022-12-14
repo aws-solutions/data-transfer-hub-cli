@@ -117,6 +117,13 @@ func NewFinder(ctx context.Context, cfg *JobConfig) (f *Finder) {
 	srcClient := NewS3Client(ctx, cfg.SrcBucket, cfg.SrcPrefix, cfg.SrcPrefixList, cfg.SrcEndpoint, cfg.SrcRegion, cfg.SrcType, srcCred)
 	desClient := NewS3Client(ctx, cfg.DestBucket, cfg.DestPrefix, "", "", cfg.DestRegion, "Amazon_S3", desCred)
 
+	if srcClient != nil {
+		srcClient.isSrcClient = true
+	}
+
+	SRC_CRED = srcCred
+	DST_CRED = desCred
+
 	f = &Finder{
 		srcClient: srcClient,
 		desClient: desClient,
@@ -124,6 +131,36 @@ func NewFinder(ctx context.Context, cfg *JobConfig) (f *Finder) {
 		cfg:       cfg,
 	}
 	return
+}
+
+func RunTicker(ctx context.Context, cfg *JobConfig) {
+	t := &JobTicker{}
+	t.updateTimer()
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("timer has been stopped")
+			t.timer.Stop()
+		case <-t.timer.C:
+			log.Printf("ticker update S3 Credentials")
+			updateCreds(ctx, cfg)
+			t.updateTimer()
+		}
+	}
+}
+
+func updateCreds(ctx context.Context, cfg *JobConfig) {
+	if cfg == nil {
+		log.Print("nil config")
+		return
+	}
+	sm, err := NewSecretService(ctx)
+	if err != nil {
+		log.Printf("Warning - Unable to load credentials, use default setting - %s\n", err.Error())
+	}
+	SRC_CRED = getCredentials(ctx, cfg.SrcCredential, cfg.SrcInCurrentAccount, sm)
+	DST_CRED = getCredentials(ctx, cfg.DestCredential, cfg.DestInCurrentAccount, sm)
+	log.Print("src_cred and dst_cred has been updated")
 }
 
 // Run is main execution function for Finder.
@@ -422,6 +459,13 @@ func NewWorker(ctx context.Context, cfg *JobConfig) (w *Worker) {
 	srcClient := NewS3Client(ctx, cfg.SrcBucket, cfg.SrcPrefix, cfg.SrcPrefixList, cfg.SrcEndpoint, cfg.SrcRegion, cfg.SrcType, srcCred)
 	desClient := NewS3Client(ctx, cfg.DestBucket, cfg.DestPrefix, "", "", cfg.DestRegion, "Amazon_S3", desCred)
 
+	if srcClient != nil {
+		srcClient.isSrcClient = true
+	}
+
+	SRC_CRED = srcCred
+	DST_CRED = desCred
+
 	return &Worker{
 		srcClient: srcClient,
 		desClient: desClient,
@@ -599,6 +643,13 @@ func (w *Worker) processResult(ctx context.Context, obj *Object, rh *string, res
 
 	log.Printf("----->Transferred 1 object %s with status %s\n", obj.Key, res.status)
 	w.db.UpdateItem(ctx, &obj.Key, res)
+
+	if res.status == "ERROR" {
+		if strings.Contains(res.err.Error(), "403") {
+			log.Printf("Authentication failed, will update credentials")
+			updateCreds(ctx, w.cfg)
+		}
+	}
 
 	if res.status == "DONE" || res.status == "CANCEL" {
 		w.sqs.DeleteMessage(ctx, rh)

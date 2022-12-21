@@ -137,15 +137,10 @@ func RunTicker(ctx context.Context, cfg *JobConfig) {
 	t := &JobTicker{}
 	t.updateTimer()
 	for {
-		select {
-		case <-ctx.Done():
-			log.Printf("timer has been stopped")
-			t.timer.Stop()
-		case <-t.timer.C:
-			log.Printf("ticker update S3 Credentials")
-			updateCreds(ctx, cfg)
-			t.updateTimer()
-		}
+		<-t.timer.C
+		log.Printf("ticker update S3 Credentials")
+		updateCreds(ctx, cfg)
+		t.updateTimer()
 	}
 }
 

@@ -1,1 +1,14 @@
 project_name: dthcli
+builds:
+- ignore:
+    # Exclude the following combinations
+    - goos: darwin
+      goarch: '386'
+    - goos: darwin
+      goarch: 'arm'
+    - goos: windows
+      goarch: 'arm'
+    - goos: windows
+      goarch: 'arm64'
+    - goos: windows
+      goarch: '386'

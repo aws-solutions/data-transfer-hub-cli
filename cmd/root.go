@@ -96,6 +96,7 @@ func initConfig() {
 	viper.BindEnv("srcCredential", "SRC_CREDENTIALS")
 	viper.BindEnv("srcInCurrentAccount", "SRC_IN_CURRENT_ACCOUNT")
 	viper.BindEnv("skipCompare", "SKIP_COMPARE")
+	viper.BindEnv("payerRequest", "PAYER_REQUEST")
 
 	viper.BindEnv("destBucket", "DEST_BUCKET")
 	viper.BindEnv("destPrefix", "DEST_PREFIX")
@@ -155,6 +156,7 @@ func initConfig() {
 		SrcCredential:        viper.GetString("srcCredential"),
 		SrcInCurrentAccount:  viper.GetBool("srcInCurrentAccount"),
 		SkipCompare:          viper.GetBool("skipCompare"),
+		PayerRequest:         viper.GetBool("payerRequest"),
 		DestBucket:           viper.GetString("destBucket"),
 		DestPrefix:           viper.GetString("destPrefix"),
 		DestRegion:           viper.GetString("destRegion"),

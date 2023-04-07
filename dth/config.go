@@ -69,7 +69,7 @@ type JobConfig struct {
 	SrcType, SrcBucket, SrcPrefix, SrcPrefixList, SrcRegion, SrcEndpoint, SrcCredential string
 	DestBucket, DestPrefix, DestRegion, DestCredential, DestStorageClass, DestAcl       string
 	JobTableName, JobQueueName                                                          string
-	SrcInCurrentAccount, DestInCurrentAccount, SkipCompare                              bool
+	SrcInCurrentAccount, DestInCurrentAccount, SkipCompare, PayerRequest                bool
 	*JobOptions
 }
 

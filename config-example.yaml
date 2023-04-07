@@ -6,6 +6,7 @@ srcEndpoint:
 srcCredential: src
 srcInCurrentAccount: false
 skipCompare: false
+payerRequest: false
 
 destBucket: dest-bucket
 destPrefix:

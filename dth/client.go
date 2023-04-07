@@ -60,6 +60,7 @@ type Client interface {
 type S3Client struct {
 	bucket, prefix, prefixList, region, sourceType string
 	isSrcClient                                    bool
+	isPayerRequest                                 bool
 	client                                         *s3.Client
 }
 
@@ -171,10 +172,22 @@ func (c *S3Client) GetObject(ctx context.Context, key *string, size, start, chun
 		return nil, nil
 	}
 	bodyRange := fmt.Sprintf("bytes=%d-%d", start, start+chunkSize-1)
-	input := &s3.GetObjectInput{
-		Bucket: &c.bucket,
-		Key:    key,
-		Range:  &bodyRange,
+
+	var input *s3.GetObjectInput
+
+	if c.isPayerRequest {
+		input = &s3.GetObjectInput{
+			Bucket:       &c.bucket,
+			Key:          key,
+			Range:        &bodyRange,
+			RequestPayer: types.RequestPayerRequester,
+		}
+	} else {
+		input = &s3.GetObjectInput{
+			Bucket: &c.bucket,
+			Key:    key,
+			Range:  &bodyRange,
+		}
 	}
 
 	output, err := c.client.GetObject(ctx, input, getClientCredentialsModifyFn(c.isSrcClient, SRC_CRED, DST_CRED))
@@ -199,12 +212,25 @@ func (c *S3Client) GetObject(ctx context.Context, key *string, size, start, chun
 // Internal func to call API to list objects.
 func (c *S3Client) listObjectFn(ctx context.Context, continuationToken, prefix, delimiter *string, maxKeys int32) (*s3.ListObjectsV2Output, error) {
 
-	input := &s3.ListObjectsV2Input{
-		Bucket:       &c.bucket,
-		Prefix:       prefix,
-		MaxKeys:      maxKeys,
-		Delimiter:    delimiter,
-		EncodingType: "url",
+	var input *s3.ListObjectsV2Input
+
+	if c.isPayerRequest {
+		input = &s3.ListObjectsV2Input{
+			Bucket:       &c.bucket,
+			Prefix:       prefix,
+			MaxKeys:      maxKeys,
+			Delimiter:    delimiter,
+			EncodingType: "url",
+			RequestPayer: types.RequestPayerRequester,
+		}
+	} else {
+		input = &s3.ListObjectsV2Input{
+			Bucket:       &c.bucket,
+			Prefix:       prefix,
+			MaxKeys:      maxKeys,
+			Delimiter:    delimiter,
+			EncodingType: "url",
+		}
 	}
 
 	if *continuationToken != "" {

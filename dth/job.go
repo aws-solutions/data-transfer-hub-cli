@@ -121,6 +121,10 @@ func NewFinder(ctx context.Context, cfg *JobConfig) (f *Finder) {
 		srcClient.isSrcClient = true
 	}
 
+	if cfg.PayerRequest {
+		srcClient.isPayerRequest = true
+	}
+
 	SRC_CRED = srcCred
 	DST_CRED = desCred
 
@@ -182,6 +186,10 @@ func (f *Finder) Run(ctx context.Context) {
 
 	var prefixes []*string
 	log.Printf("Prefix List File: %s", f.cfg.SrcPrefixList)
+
+	if f.cfg.PayerRequest {
+		log.Printf("Enable Payer Request Mode")
+	}
 
 	if len(f.cfg.SrcPrefixList) > 0 {
 		prefixes = f.srcClient.ListSelectedPrefixes(ctx, &f.cfg.SrcPrefixList)
@@ -456,6 +464,10 @@ func NewWorker(ctx context.Context, cfg *JobConfig) (w *Worker) {
 
 	if srcClient != nil {
 		srcClient.isSrcClient = true
+	}
+
+	if cfg.PayerRequest {
+		srcClient.isPayerRequest = true
 	}
 
 	SRC_CRED = srcCred

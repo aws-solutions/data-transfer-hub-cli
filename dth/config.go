@@ -61,7 +61,7 @@ const (
 type JobOptions struct {
 	ChunkSize, MultipartThreshold, MessageBatchSize, FinderDepth, FinderNumber, WorkerNumber int
 	MaxKeys                                                                                  int32
-	IncludeMetadata                                                                          bool
+	IncludeMetadata, IgnoreMissingObjects                                                    bool
 }
 
 // JobConfig is General Job Info

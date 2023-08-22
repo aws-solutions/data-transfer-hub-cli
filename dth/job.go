@@ -817,7 +817,7 @@ func (w *Worker) generateMultiPartTransferJobs(ctx context.Context, obj *Object,
 	totalSize := obj.Size
 	totalPartsCount, partSize := w.calculatePartSize(totalSize)
 
-	log.Printf("totalPartsCount: %d, partSize: %d\n", totalPartsCount, partSize)
+	// log.Printf("totalPartsCount: %d, partSize: %d\n", totalPartsCount, partSize)
 
 	// Get existing upload ID or initiate multipart upload
 	uploadID := w.desClient.GetUploadID(ctx, destKey)
@@ -1157,7 +1157,7 @@ func (w *Worker) transferSinglePart(ctx context.Context, obj *Object, destKey *s
 
 	if err != nil {
 		params := PartTransferResult{
-			ObjectKey:       *destKey,
+			ObjectKey:       obj.Key,
 			PartNumber:      obj.PartNumber,
 			TotalPartsCount: obj.TotalPartsCount,
 			UploadID:        obj.UploadID,
@@ -1175,7 +1175,7 @@ func (w *Worker) transferSinglePart(ctx context.Context, obj *Object, destKey *s
 
 	log.Printf("----->Completed range: %s from %s/%s to %s/%s\n", obj.BodyRange, w.cfg.SrcBucket, obj.Key, w.cfg.DestBucket, *destKey)
 	params := PartTransferResult{
-		ObjectKey:       *destKey,
+		ObjectKey:       obj.Key,
 		PartNumber:      obj.PartNumber,
 		TotalPartsCount: obj.TotalPartsCount,
 		UploadID:        obj.UploadID,

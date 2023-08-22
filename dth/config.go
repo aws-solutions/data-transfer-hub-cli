@@ -34,9 +34,13 @@ const (
 	// DefaultMaxKeys is the maximum number of keys returned per listing request, default is 1000
 	DefaultMaxKeys int32 = 1000
 
-	// DefaultMultipartThreshold is the threshold size (in MB) to determine to use multipart upload or not.
+	// DefaultMultipartThreshold is the threshold size (in MB) to determine to use multipart upload or not (in single worker node).
 	// When object size is greater or equals to MultipartThreshold, multipart upload will be used.
 	DefaultMultipartThreshold int = 10
+
+	// DefaultGiantFileThreshold is the threshold size (in MB) to determine to use multipart upload or not (in whole worker cluster).
+	// When object size is greater or equals to GiantFileThreshold, the object will to split and transferred by the whole cluster.
+	DefaultGiantFileThreshold int = 1024
 
 	// DefaultChunkSize is the chunk size (in MB) for each part when using multipart upload
 	DefaultChunkSize int = 5
@@ -59,16 +63,16 @@ const (
 
 // JobOptions is General Job Info
 type JobOptions struct {
-	ChunkSize, MultipartThreshold, MessageBatchSize, FinderDepth, FinderNumber, WorkerNumber int
-	MaxKeys                                                                                  int32
-	IncludeMetadata                                                                          bool
+	ChunkSize, MultipartThreshold, GiantFileThreshold, MessageBatchSize, FinderDepth, FinderNumber, WorkerNumber int
+	MaxKeys                                                                                                      int32
+	IncludeMetadata                                                                                              bool
 }
 
 // JobConfig is General Job Info
 type JobConfig struct {
 	SrcType, SrcBucket, SrcPrefix, SrcPrefixList, SrcRegion, SrcEndpoint, SrcCredential string
 	DestBucket, DestPrefix, DestRegion, DestCredential, DestStorageClass, DestAcl       string
-	JobTableName, JobQueueName                                                          string
+	JobTableName, JobQueueName, SinglePartQueueName                                     string
 	SrcInCurrentAccount, DestInCurrentAccount, SkipCompare, PayerRequest                bool
 	*JobOptions
 }

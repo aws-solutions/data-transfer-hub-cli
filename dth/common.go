@@ -47,9 +47,13 @@ var (
 
 // Object represents an object to be replicated.
 type Object struct {
-	Key       string `json:"key"`
-	Size      int64  `json:"size"`
-	Sequencer string `json:"sequencer,omitempty"`
+	Key             string `json:"key"`
+	Size            int64  `json:"size"`
+	Sequencer       string `json:"sequencer,omitempty"`
+	PartNumber      int    `json:"partNumber,omitempty"`
+	TotalPartsCount int    `json:"totalPartsCount,omitempty"`
+	UploadID        string `json:"uploadID,omitempty"`
+	BodyRange       string `json:"bodyRange,omitempty"`
 }
 
 // S3Event represents a basic structure of a S3 Event Message
@@ -61,6 +65,15 @@ type S3Event struct {
 			Object `json:"object"`
 		}
 	}
+}
+
+// SinglePartTransferEvent represents a basic structure of a SinglePart Transfer Event Message
+type SinglePartTransferEvent struct {
+	ObjectKey       string `json:"objectKey"`
+	PartNumber      int    `json:"partNumber"`
+	TotalPartsCount int    `json:"totalPartsCount"`
+	UploadID        string `json:"uploadID"`
+	BodyRange       string `json:"bodyRange"`
 }
 
 // Part represents a part for multipart upload
@@ -126,6 +139,20 @@ func newS3Event(str *string) (e *S3Event) {
 
 	if err != nil {
 		log.Printf("Unable to convert string to S3 Event - %s", err.Error())
+		return nil
+	}
+	// log.Printf("Key: %s, Size: %d\n", m.Key, m.Size)
+	return
+}
+
+// Helper function to create single part transfer event base on Json string
+func newSinglePartTransferEvent(str *string) (e *SinglePartTransferEvent) {
+
+	e = new(SinglePartTransferEvent)
+	err := json.Unmarshal([]byte(*str), e)
+
+	if err != nil {
+		log.Printf("Unable to convert string to single part transfer job - %s", err.Error())
 		return nil
 	}
 	// log.Printf("Key: %s, Size: %d\n", m.Key, m.Size)

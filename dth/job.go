@@ -846,7 +846,7 @@ func (w *Worker) generateMultiPartTransferJobs(ctx context.Context, obj *Object,
 		params := PartTransferJobParams{
 			SrcBucket:       w.cfg.SrcBucket,
 			DstBucket:       w.cfg.DestBucket,
-			ObjectKey:       *destKey,
+			ObjectKey:       obj.Key,
 			PartNumber:      partNumber,
 			TotalPartsCount: totalPartsCount,
 			StartByte:       startByte,

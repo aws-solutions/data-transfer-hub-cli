@@ -838,7 +838,7 @@ func (w *Worker) generateMultiPartTransferJobs(ctx context.Context, obj *Object,
 	// Create and send transfer job messages for each part
 	for partNumber := 1; partNumber <= totalPartsCount; partNumber++ {
 		startByte := int64(int64(partNumber-1) * partSize)
-		endByte := int64(int64(partNumber) * partSize)
+		endByte := int64(int64(partNumber)*partSize) - 1
 		if endByte > totalSize {
 			endByte = totalSize
 		}

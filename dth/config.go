@@ -72,7 +72,7 @@ type JobOptions struct {
 type JobConfig struct {
 	SrcType, SrcBucket, SrcPrefix, SrcPrefixList, SrcRegion, SrcEndpoint, SrcCredential string
 	DestBucket, DestPrefix, DestRegion, DestCredential, DestStorageClass, DestAcl       string
-	JobTableName, JobQueueName, SinglePartQueueName                                     string
+	JobTableName, JobQueueName, SinglePartTableName, SfnArn                             string
 	SrcInCurrentAccount, DestInCurrentAccount, SkipCompare, PayerRequest                bool
 	*JobOptions
 }

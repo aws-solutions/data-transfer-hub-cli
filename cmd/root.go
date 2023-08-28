@@ -109,7 +109,8 @@ func initConfig() {
 
 	viper.BindEnv("jobTableName", "JOB_TABLE_NAME")
 	viper.BindEnv("jobQueueName", "JOB_QUEUE_NAME")
-	viper.BindEnv("singlePartQueueName", "SINGLE_PART_QUEUE_NAME")
+	viper.BindEnv("singlePartTableName", "SINGLE_PART_TABLE_NAME")
+	viper.BindEnv("sfnArn", "SFN_ARN")
 
 	viper.BindEnv("options.maxKeys", "MAX_KEYS")
 	viper.BindEnv("options.chunkSize", "CHUNK_SIZE")
@@ -170,7 +171,8 @@ func initConfig() {
 		DestInCurrentAccount: viper.GetBool("destInCurrentAccount"),
 		JobTableName:         viper.GetString("jobTableName"),
 		JobQueueName:         viper.GetString("jobQueueName"),
-		SinglePartQueueName:  viper.GetString("singlePartQueueName"),
+		SinglePartTableName:  viper.GetString("singlePartTableName"),
+		SfnArn:               viper.GetString("sfnArn"),
 		JobOptions:           options,
 	}
 

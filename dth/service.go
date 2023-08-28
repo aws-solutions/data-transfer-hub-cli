@@ -19,6 +19,7 @@ package dth
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strconv"
@@ -28,6 +29,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	dtype "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	sm "github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	stepFunction "github.com/aws/aws-sdk-go-v2/service/sfn"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 )
@@ -39,6 +41,18 @@ type Item struct {
 	Size, StartTimestamp, EndTimestamp, SpentTime int64
 	StartTime, EndTime                            string
 	// ExtraInfo               Metadata
+}
+
+// SinglePartItem holds info about the single part info to be stored in DynamoDB
+type SinglePartItem struct {
+	UploadId                                string
+	PartNumber                              int
+	ObjectKey                               string
+	TotalPartsCount                         int
+	RetryCount                              int
+	JobStatus, Etag                         string
+	StartTimestamp, EndTimestamp, SpentTime int64
+	StartTime, EndTime                      string
 }
 
 // DBService is a wrapper service used to interact with Amazon DynamoDB
@@ -56,6 +70,12 @@ type SqsService struct {
 // SecretService is a wrapper service used to interact with Amazon secrets manager
 type SecretService struct {
 	client *sm.Client
+}
+
+// SFNService is a wrapper service used to interact with Amazon Step Function
+type SfnService struct {
+	sfnArn string
+	client *stepFunction.Client
 }
 
 // NewSecretService is a helper func to create a SecretService instance
@@ -111,6 +131,20 @@ func NewSqsService(ctx context.Context, queueName string) (*SqsService, error) {
 	}
 
 	return &SqsService, nil
+}
+
+// NewSfnService is a helper func to create a SfnService instance
+func NewSfnService(ctx context.Context, sfnArn string) (*SfnService, error) {
+
+	cfg := loadDefaultConfig(ctx)
+
+	// Create an Amazon Step Function client.
+	client := stepFunction.NewFromConfig(cfg)
+
+	return &SfnService{
+		sfnArn: sfnArn,
+		client: client,
+	}, nil
 }
 
 // SendMessage function sends 1 message at a time to the Queue
@@ -331,6 +365,41 @@ func (db *DBService) PutItem(ctx context.Context, o *Object) error {
 	return err
 }
 
+// PutSinglePartItem is a function to creates a new item, or replaces an old item with a new item in DynamoDB
+// Restart a transfer of an single part will replace the old item with new info
+func (db *DBService) PutSinglePartItem(ctx context.Context, o *Object) error {
+
+	item := &SinglePartItem{
+		UploadId:        o.UploadID,
+		PartNumber:      o.PartNumber,
+		TotalPartsCount: o.TotalPartsCount,
+		ObjectKey:       o.Key,
+		RetryCount:      0,
+		JobStatus:       "STARTED",
+		StartTime:       time.Now().Format("2006/01/02 15:04:05"),
+		StartTimestamp:  time.Now().Unix(),
+	}
+
+	itemAttr, err := attributevalue.MarshalMap(item)
+
+	if err != nil {
+		log.Printf("Unable to Marshal DynamoDB attributes for %s - %s\n", o.Key, err.Error())
+	} else {
+		input := &dynamodb.PutItemInput{
+			TableName: &db.tableName,
+			Item:      itemAttr,
+		}
+
+		_, err = db.client.PutItem(ctx, input)
+
+		if err != nil {
+			log.Printf("Failed to put item for %s in DynamoDB - %s\n", o.Key, err.Error())
+		}
+	}
+
+	return err
+}
+
 // UpdateItem is a function to update an item in DynamoDB
 func (db *DBService) UpdateItem(ctx context.Context, key *string, result *TransferResult) error {
 	// log.Printf("Update item for %s in DynamoDB\n", *key)
@@ -369,6 +438,52 @@ func (db *DBService) UpdateItem(ctx context.Context, key *string, result *Transf
 	// if err != nil {
 	// 	log.Printf("failed to unmarshal Dynamodb Scan Items, %v", err)
 	// }
+	return err
+}
+
+// UpdateItem is a function to update an single part item in DynamoDB
+func (db *DBService) UpdateSinglePartItem(ctx context.Context, o *Object, result *TransferResult) error {
+	// log.Printf("Update item for %s in DynamoDB\n", *key)
+
+	etag := ""
+	if result.etag != nil {
+		etag = *result.etag
+	}
+
+	expr := "set JobStatus = :s, Etag = :tg, EndTime = :et, EndTimestamp = :etm, SpentTime = :etm - StartTimestamp"
+	updateExpr := expr
+
+	if result.status == "ERROR" {
+		updateExpr += ", retryCount = retryCount + :inc"
+	}
+
+	input := &dynamodb.UpdateItemInput{
+		TableName: &db.tableName,
+		Key: map[string]dtype.AttributeValue{
+			"UploadId":   &dtype.AttributeValueMemberS{Value: o.UploadID},
+			"PartNumber": &dtype.AttributeValueMemberN{Value: fmt.Sprintf("%d", o.PartNumber)},
+		},
+		ExpressionAttributeValues: map[string]dtype.AttributeValue{
+			":s":   &dtype.AttributeValueMemberS{Value: result.status},
+			":tg":  &dtype.AttributeValueMemberS{Value: etag},
+			":et":  &dtype.AttributeValueMemberS{Value: time.Now().Format("2006/01/02 15:04:05")},
+			":etm": &dtype.AttributeValueMemberN{Value: fmt.Sprintf("%d", time.Now().Unix())},
+		},
+		ReturnValues:     "NONE",
+		UpdateExpression: &expr,
+	}
+
+	if result.status == "ERROR" {
+		input.ExpressionAttributeValues[":inc"] = &dtype.AttributeValueMemberN{
+			Value: fmt.Sprintf("%d", 1),
+		}
+	}
+
+	_, err := db.client.UpdateItem(ctx, input)
+
+	if err != nil {
+		log.Printf("Failed to update item for %s UploadId %s part number %d in Single Part DynamoDB - %s\n", o.Key, o.UploadID, o.PartNumber, err.Error())
+	}
 	return err
 }
 
@@ -436,4 +551,34 @@ func (db *DBService) QueryItem(ctx context.Context, key *string) (*Item, error) 
 	}
 	return item, nil
 
+}
+
+// QueryItem is a function to query an item by Key in DynamoDB
+func (sfn *SfnService) InvokeStepFunction(ctx context.Context, uploadID string, totalPartsCount int, objectKey string) error {
+	// log.Printf("Query item for %s in DynamoDB\n", *key)
+
+	input := map[string]interface{}{
+		"arguments": map[string]interface{}{
+			"uploadID":        uploadID,
+			"totalPartsCount": totalPartsCount,
+			"objectKey":       objectKey,
+		},
+	}
+	inputJSON := generateJSONInput(input)
+
+	_, err := sfn.client.StartExecution(ctx, &stepFunction.StartExecutionInput{
+		StateMachineArn: &sfn.sfnArn,
+		Input:           &inputJSON,
+	})
+
+	if err != nil {
+		log.Printf("Error invoking Step Function for %s 's uploadId %s - %s\n", objectKey, uploadID, err.Error())
+	}
+
+	return err
+}
+
+func generateJSONInput(inputMap map[string]interface{}) string {
+	jsonBytes, _ := json.Marshal(inputMap)
+	return string(jsonBytes)
 }

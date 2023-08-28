@@ -196,3 +196,21 @@ func appendPrefix(key, prefix *string) *string {
 	newkey := fmt.Sprintf("%s%s%s", *prefix, delimiter, *key)
 	return &newkey
 }
+
+func calculateCompletedBytes(bodyRange string) int64 {
+	// bodyRange format: "bytes=startByte-endByte"
+	parts := strings.Split(bodyRange, "=")
+	if len(parts) != 2 {
+		return 0
+	}
+
+	rangeParts := strings.Split(parts[1], "-")
+	if len(rangeParts) != 2 {
+		return 0
+	}
+
+	startByte, _ := strconv.ParseInt(rangeParts[0], 10, 64)
+	endByte, _ := strconv.ParseInt(rangeParts[1], 10, 64)
+
+	return endByte - startByte + 1
+}

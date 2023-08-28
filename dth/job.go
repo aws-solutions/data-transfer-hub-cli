@@ -65,8 +65,9 @@ type Worker struct {
 	srcClient, desClient Client
 	cfg                  *JobConfig
 	sqs                  *SqsService
-	singlePartSqs        *SqsService
 	db                   *DBService
+	splitPartDb          *DBService
+	sfn                  *SfnService
 }
 
 // TransferResult stores the result after transfer.
@@ -476,9 +477,11 @@ func (f *Finder) directSend(ctx context.Context, prefix *string, batchCh chan st
 func NewWorker(ctx context.Context, cfg *JobConfig) (w *Worker) {
 	log.Printf("Source Type is %s\n", cfg.SrcType)
 	sqs, _ := NewSqsService(ctx, cfg.JobQueueName)
-	singlePartSqs, _ := NewSqsService(ctx, cfg.SinglePartQueueName)
 
 	db, _ := NewDBService(ctx, cfg.JobTableName)
+	splitPartDb, _ := NewDBService(ctx, cfg.SinglePartTableName)
+
+	sfn, _ := NewSfnService(ctx, cfg.SfnArn)
 
 	sm, err := NewSecretService(ctx)
 	if err != nil {
@@ -503,12 +506,13 @@ func NewWorker(ctx context.Context, cfg *JobConfig) (w *Worker) {
 	DST_CRED = desCred
 
 	return &Worker{
-		srcClient:     srcClient,
-		desClient:     desClient,
-		sqs:           sqs,
-		singlePartSqs: singlePartSqs,
-		db:            db,
-		cfg:           cfg,
+		srcClient:   srcClient,
+		desClient:   desClient,
+		sqs:         sqs,
+		db:          db,
+		splitPartDb: splitPartDb,
+		sfn:         sfn,
+		cfg:         cfg,
 	}
 }
 
@@ -644,9 +648,6 @@ func (w *Worker) startMigration(ctx context.Context, obj *Object, rh, destKey *s
 
 	log.Printf("Migrating from %s/%s to %s/%s\n", w.cfg.SrcBucket, obj.Key, w.cfg.DestBucket, *destKey)
 
-	// Log in DynamoDB
-	w.db.PutItem(ctx, obj)
-
 	// Start a heart beat
 	go w.heartBeat(ctx1, &obj.Key, rh)
 
@@ -654,8 +655,13 @@ func (w *Worker) startMigration(ctx context.Context, obj *Object, rh, destKey *s
 
 	// handle single part transfer
 	if obj.BodyRange != "" {
+		// Log in DynamoDB
+		w.splitPartDb.PutSinglePartItem(ctx, obj)
 		res = w.migrateSinglePart(ctx, obj, destKey, transferCh)
 	} else {
+		// Log in DynamoDB
+		w.db.PutItem(ctx, obj)
+
 		if obj.Size <= int64(w.cfg.MultipartThreshold*MB) {
 			res = w.migrateSmallFile(ctx, obj, destKey, transferCh)
 		} else if obj.Size < int64(w.cfg.GiantFileThreshold*MB) {
@@ -702,8 +708,9 @@ func (w *Worker) processResult(ctx context.Context, obj *Object, rh *string, res
 	if res.status == "SPLIT_DONE" {
 		log.Printf("----->Split 1 object %s into %d parts\n", obj.Key, res.splitPartsCount)
 		w.db.UpdateItem(ctx, &obj.Key, res)
-	} else if res.status == "PART_DONE" {
+	} else if res.status == "PART_DONE" || res.status == "PART_ERROR" || res.status == "PART_CANCEL" {
 		log.Printf("----->(Multi-part) Transferred 1 part %s with status %s\n", obj.Key, res.status)
+		w.splitPartDb.UpdateSinglePartItem(ctx, obj, res)
 	} else {
 		log.Printf("----->Transferred 1 object %s with status %s\n", obj.Key, res.status)
 		w.db.UpdateItem(ctx, &obj.Key, res)
@@ -716,7 +723,8 @@ func (w *Worker) processResult(ctx context.Context, obj *Object, rh *string, res
 		}
 	}
 
-	if res.status == "DONE" || res.status == "CANCEL" || res.status == "SPLIT_DONE" || res.status == "PART_DONE" {
+	if res.status == "DONE" || res.status == "CANCEL" || res.status == "SPLIT_DONE" ||
+		res.status == "PART_DONE" || res.status == "PART_CANCEL" {
 		w.sqs.DeleteMessage(ctx, rh)
 	}
 }
@@ -787,12 +795,12 @@ func (w *Worker) migrateSinglePart(ctx context.Context, obj *Object, destKey *st
 
 // Internal func to calculate the appropriate part size for cluster concurrent transfer.
 // Considering the size of the cluster and the maximum size of a single S3 object is 5TB,
-// set the maximum number of part fragments to 10000, and set the minimum part size to 50MB.
+// set the maximum number of part fragments to 10000, and set the minimum part size to 5MB.
 // This function will calculate the total part and the corresponding part size under the above restrictions.
 func (w *Worker) calculatePartSize(totalSize int64) (int, int64) {
 	// Max number of Parts allowed by Amazon S3 is 10000
 	maxPartFragments := 10000
-	minPartSize := int64(50 * 1024 * 1024) // 50MB in bytes
+	minPartSize := int64(5 * 1024 * 1024) // 5MB in bytes
 
 	// Calculate the maximum allowed part size based on the maximum number of part fragments
 	maxAllowedPartSize := (totalSize / int64(maxPartFragments)) + 1
@@ -858,6 +866,12 @@ func (w *Worker) generateMultiPartTransferJobs(ctx context.Context, obj *Object,
 		// Send transfer job message to SQS
 		w.sendTransferJobMessage(ctx, params)
 	}
+	err = w.InvokeStepFunction(ctx, *uploadID, totalPartsCount, obj.Key)
+
+	if err != nil {
+		log.Printf("Failed to invoke Step Function - %s\n", err.Error())
+		return 0, err
+	}
 	return totalPartsCount, nil
 }
 
@@ -881,32 +895,6 @@ func (w *Worker) sendTransferJobMessage(ctx context.Context, params PartTransfer
 
 	// Send message to SQS
 	w.sqs.SendMessage(ctx, &messageBody)
-}
-
-// Internal func to send single part transfer result message to result sqs.
-func (w *Worker) sendTransferResultMessage(ctx context.Context, result PartTransferResult) {
-	// Create a message body with transfer job parameters
-	messageBody := fmt.Sprintf(
-		`{
-"objectKey": "%s",
-"partNumber": %d,
-"totalPartsCount": %d,
-"uploadID": "%s",
-"etag": "%s",
-"status": "%s",
-"error": "%s"
-}`,
-		result.ObjectKey,
-		result.PartNumber,
-		result.TotalPartsCount,
-		result.UploadID,
-		result.ETag,
-		result.Status,
-		result.Error,
-	)
-
-	// Send message to SQS
-	w.singlePartSqs.SendMessage(ctx, &messageBody)
 }
 
 // Internal func to deal with the transferring of giant file.
@@ -1138,13 +1126,13 @@ func (w *Worker) transferSinglePart(ctx context.Context, obj *Object, destKey *s
 		if errors.As(err, &ae) {
 			log.Printf("No such key %s, the object might be deleted. Cancelling...", obj.Key)
 			return &TransferResult{
-				status: "CANCEL",
+				status: "PART_CANCEL",
 				err:    err,
 			}
 		}
 		// status = "ERROR"
 		return &TransferResult{
-			status: "ERROR",
+			status: "PART_ERROR",
 			err:    err,
 		}
 	}
@@ -1156,37 +1144,23 @@ func (w *Worker) transferSinglePart(ctx context.Context, obj *Object, destKey *s
 	body = nil // release memory
 
 	if err != nil {
-		params := PartTransferResult{
-			ObjectKey:       obj.Key,
-			PartNumber:      obj.PartNumber,
-			TotalPartsCount: obj.TotalPartsCount,
-			UploadID:        obj.UploadID,
-			ETag:            *etag,
-			Status:          "ERROR",
-			Error:           err.Error(),
-		}
-		// Send part transfer result message to SQS
-		w.sendTransferResultMessage(ctx, params)
 		return &TransferResult{
-			status: "ERROR",
+			status: "PART_ERROR",
 			err:    err,
 		}
 	}
 
-	log.Printf("----->Completed range: %s from %s/%s to %s/%s\n", obj.BodyRange, w.cfg.SrcBucket, obj.Key, w.cfg.DestBucket, *destKey)
-	params := PartTransferResult{
-		ObjectKey:       obj.Key,
-		PartNumber:      obj.PartNumber,
-		TotalPartsCount: obj.TotalPartsCount,
-		UploadID:        obj.UploadID,
-		ETag:            *etag,
-		Status:          "DONE",
-		Error:           "",
-	}
-	// Send part transfer result message to SQS
-	w.sendTransferResultMessage(ctx, params)
+	completedBytes := calculateCompletedBytes(obj.BodyRange)
+
+	log.Printf("----->Completed %d Bytes for range: %s from %s/%s to %s/%s\n", completedBytes, obj.BodyRange, w.cfg.SrcBucket, obj.Key, w.cfg.DestBucket, *destKey)
 	return &TransferResult{
 		status: "PART_DONE",
 		etag:   etag,
 	}
+}
+
+func (w *Worker) InvokeStepFunction(ctx context.Context, uploadID string, totalPartsCount int, objectKey string) error {
+	log.Printf("Invoke Step Function for %s with uploadID %s and totalPartsCount %d\n", objectKey, uploadID, totalPartsCount)
+	err := w.sfn.InvokeStepFunction(ctx, uploadID, totalPartsCount, objectKey)
+	return err
 }

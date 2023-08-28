@@ -18,7 +18,8 @@ destAcl: bucket-owner-full-control
 
 jobTableName: test-table
 jobQueueName: test-queue
-singlePartQueueName: single-part-test-queue
+singlePartTableName: single-part-test-table
+sfnArn: sfn-arn
 
 options:
   chunkSize: 5

@@ -30,6 +30,7 @@ import (
 	dtype "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	sm "github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	stepFunction "github.com/aws/aws-sdk-go-v2/service/sfn"
+	sfnType "github.com/aws/aws-sdk-go-v2/service/sfn/types"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 )
@@ -453,8 +454,8 @@ func (db *DBService) UpdateSinglePartItem(ctx context.Context, o *Object, result
 	expr := "set JobStatus = :s, Etag = :tg, EndTime = :et, EndTimestamp = :etm, SpentTime = :etm - StartTimestamp"
 	updateExpr := expr
 
-	if result.status == "ERROR" {
-		updateExpr += ", retryCount = retryCount + :inc"
+	if result.status == "PART_ERROR" {
+		updateExpr += ", RetryCount = RetryCount + :inc"
 	}
 
 	input := &dynamodb.UpdateItemInput{
@@ -473,7 +474,7 @@ func (db *DBService) UpdateSinglePartItem(ctx context.Context, o *Object, result
 		UpdateExpression: &expr,
 	}
 
-	if result.status == "ERROR" {
+	if result.status == "PART_ERROR" {
 		input.ExpressionAttributeValues[":inc"] = &dtype.AttributeValueMemberN{
 			Value: fmt.Sprintf("%d", 1),
 		}
@@ -576,6 +577,37 @@ func (sfn *SfnService) InvokeStepFunction(ctx context.Context, uploadID string, 
 	}
 
 	return err
+}
+
+// CountCurrentRunningTasks is a function to count the number of current running tasks in Step Function
+func (sfn *SfnService) CountCurrentRunningTasks(ctx context.Context) (int, error) {
+	response, err := sfn.client.ListExecutions(ctx, &stepFunction.ListExecutionsInput{
+		StateMachineArn: &sfn.sfnArn,
+		StatusFilter:    sfnType.ExecutionStatusRunning,
+	})
+	if err != nil {
+		log.Printf("Error listing running tasks in Step Function - %s\n", err.Error())
+		return 0, err
+	}
+
+	return len(response.Executions), nil
+}
+
+// IsNoRunningTask is a function to check if there is no running task in Step Function
+func (sfn *SfnService) IsNoRunningTask(ctx context.Context) (isNoRunning bool) {
+	isNoRunning = false
+	runningTasksCount, err := sfn.CountCurrentRunningTasks(ctx)
+	if err != nil {
+		log.Printf("Error listing running tasks in Step Function %s - %s\n", sfn.sfnArn, err.Error())
+		return
+	}
+
+	log.Printf("Giant object merging Step Function %s has %d not competed task(s)\n", sfn.sfnArn, runningTasksCount)
+
+	if runningTasksCount <= 0 {
+		isNoRunning = true
+	}
+	return
 }
 
 func generateJSONInput(inputMap map[string]interface{}) string {

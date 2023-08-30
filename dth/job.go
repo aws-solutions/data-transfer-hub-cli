@@ -57,6 +57,7 @@ type Finder struct {
 	srcClient, desClient Client
 	sqs                  *SqsService
 	cfg                  *JobConfig
+	sfn                  *SfnService
 }
 
 // Worker is an implemenation of Job interface
@@ -135,6 +136,7 @@ func getCredentials(ctx context.Context, param string, inCurrentAccount bool, sm
 // NewFinder creates a new Finder instance
 func NewFinder(ctx context.Context, cfg *JobConfig) (f *Finder) {
 	sqs, _ := NewSqsService(ctx, cfg.JobQueueName)
+	sfn, _ := NewSfnService(ctx, cfg.SfnArn)
 	sm, err := NewSecretService(ctx)
 	if err != nil {
 		log.Printf("Warning - Unable to load credentials, use default setting - %s\n", err.Error())
@@ -160,6 +162,7 @@ func NewFinder(ctx context.Context, cfg *JobConfig) (f *Finder) {
 	f = &Finder{
 		srcClient: srcClient,
 		desClient: desClient,
+		sfn:       sfn,
 		sqs:       sqs,
 		cfg:       cfg,
 	}
@@ -196,6 +199,10 @@ func (f *Finder) Run(ctx context.Context) {
 
 	if !f.sqs.IsQueueEmpty(ctx) {
 		log.Fatalf("Queue might not be empty ... Please try again later")
+	}
+
+	if !f.sfn.IsNoRunningTask(ctx) {
+		log.Fatalf("There might still be ongoing tasks to merge giant objects ...  Please try again later")
 	}
 
 	// Maximum number of queued batches to be sent to SQS
@@ -1117,7 +1124,7 @@ func (w *Worker) transferSinglePart(ctx context.Context, obj *Object, destKey *s
 	var etag *string
 	var err error
 
-	log.Printf("----->Downloading single part %s from %s/%s\n", obj.BodyRange, w.cfg.SrcBucket, obj.Key)
+	log.Printf("----->Downloading single part %s from %s/%s - Part %d\n", obj.BodyRange, w.cfg.SrcBucket, obj.Key, obj.PartNumber)
 
 	body, err := w.srcClient.GetObjectPart(ctx, &obj.Key, obj.BodyRange)
 	if err != nil {
@@ -1152,7 +1159,7 @@ func (w *Worker) transferSinglePart(ctx context.Context, obj *Object, destKey *s
 
 	completedBytes := calculateCompletedBytes(obj.BodyRange)
 
-	log.Printf("----->Completed %d Bytes for range: %s from %s/%s to %s/%s\n", completedBytes, obj.BodyRange, w.cfg.SrcBucket, obj.Key, w.cfg.DestBucket, *destKey)
+	log.Printf("----->Completed %d Bytes for range: %s from %s/%s to %s/%s - Part %d\n", completedBytes, obj.BodyRange, w.cfg.SrcBucket, obj.Key, w.cfg.DestBucket, *destKey, obj.PartNumber)
 	return &TransferResult{
 		status: "PART_DONE",
 		etag:   etag,

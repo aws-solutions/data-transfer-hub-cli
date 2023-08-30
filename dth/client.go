@@ -25,7 +25,6 @@ import (
 	"io"
 	"log"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -234,10 +233,6 @@ func (c *S3Client) GetObjectPart(ctx context.Context, key *string, bodyRange str
 	output, err := c.client.GetObject(ctx, input, getClientCredentialsModifyFn(c.isSrcClient, SRC_CRED, DST_CRED))
 	if err != nil {
 		log.Printf("S3> Unable to download %s with range: %s - %s\n", *key, bodyRange, err.Error())
-		if strings.Contains(err.Error(), "i/o timeout") {
-			log.Printf("Network throttling detected, terminating process.")
-		}
-		os.Exit(1)
 		return nil, err
 	}
 

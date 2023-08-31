@@ -444,18 +444,14 @@ func (db *DBService) UpdateItem(ctx context.Context, key *string, result *Transf
 
 // UpdateItem is a function to update an single part item in DynamoDB
 func (db *DBService) UpdateSinglePartItem(ctx context.Context, o *Object, result *TransferResult) error {
-	// log.Printf("Update item for %s in DynamoDB\n", *key)
-
 	etag := ""
 	if result.etag != nil {
 		etag = *result.etag
 	}
 
 	expr := "set JobStatus = :s, Etag = :tg, EndTime = :et, EndTimestamp = :etm, SpentTime = :etm - StartTimestamp"
-	updateExpr := expr
-
 	if result.status == "PART_ERROR" {
-		updateExpr += ", RetryCount = RetryCount + :inc"
+		expr += ", RetryCount = RetryCount + :inc"
 	}
 
 	input := &dynamodb.UpdateItemInput{
@@ -483,7 +479,7 @@ func (db *DBService) UpdateSinglePartItem(ctx context.Context, o *Object, result
 	_, err := db.client.UpdateItem(ctx, input)
 
 	if err != nil {
-		log.Printf("Failed to update item for %s UploadId %s part number %d in Single Part DynamoDB - %s\n", o.Key, o.UploadID, o.PartNumber, err.Error())
+		log.Printf("Failed to update item for %s - UploadId %s - Part number %d in Single Part DynamoDB - %s\n", o.Key, o.UploadID, o.PartNumber, err.Error())
 	}
 	return err
 }

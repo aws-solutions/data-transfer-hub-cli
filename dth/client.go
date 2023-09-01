@@ -41,6 +41,7 @@ type Client interface {
 	// READ
 	HeadObject(ctx context.Context, key *string) *Metadata
 	GetObject(ctx context.Context, key *string, size, start, chunkSize int64, version string) ([]byte, error)
+	GetObjectPart(ctx context.Context, key *string, bodyRange string) ([]byte, error)
 	ListObjects(ctx context.Context, continuationToken, prefix *string, maxKeys int32) ([]*Object, error)
 	ListCommonPrefixes(ctx context.Context, depth int, maxKeys int32) (prefixes []*string)
 	ListParts(ctx context.Context, key, uploadID *string) (parts map[int]*Part)
@@ -193,6 +194,45 @@ func (c *S3Client) GetObject(ctx context.Context, key *string, size, start, chun
 	output, err := c.client.GetObject(ctx, input, getClientCredentialsModifyFn(c.isSrcClient, SRC_CRED, DST_CRED))
 	if err != nil {
 		log.Printf("S3> Unable to download %s with %d bytes start from %d - %s\n", *key, size, start, err.Error())
+		return nil, err
+	}
+
+	defer output.Body.Close()
+
+	// Read response body
+	s, err := io.ReadAll(output.Body)
+
+	if err != nil {
+		log.Printf("S3> Unable to read the content of %s - %s\n", *key, err.Error())
+		return nil, err
+	}
+	return s, nil
+
+}
+
+// GetObjectPart is a function to get (download) object from Amazon S3
+func (c *S3Client) GetObjectPart(ctx context.Context, key *string, bodyRange string) ([]byte, error) {
+	// log.Printf("S3> Downloading %s with %d bytes start from %d\n", key, size, start)
+	var input *s3.GetObjectInput
+
+	if c.isPayerRequest {
+		input = &s3.GetObjectInput{
+			Bucket:       &c.bucket,
+			Key:          key,
+			Range:        &bodyRange,
+			RequestPayer: types.RequestPayerRequester,
+		}
+	} else {
+		input = &s3.GetObjectInput{
+			Bucket: &c.bucket,
+			Key:    key,
+			Range:  &bodyRange,
+		}
+	}
+
+	output, err := c.client.GetObject(ctx, input, getClientCredentialsModifyFn(c.isSrcClient, SRC_CRED, DST_CRED))
+	if err != nil {
+		log.Printf("S3> Unable to download %s with range: %s - %s\n", *key, bodyRange, err.Error())
 		return nil, err
 	}
 

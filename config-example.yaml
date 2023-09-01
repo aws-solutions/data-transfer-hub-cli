@@ -18,10 +18,13 @@ destAcl: bucket-owner-full-control
 
 jobTableName: test-table
 jobQueueName: test-queue
+singlePartTableName: single-part-test-table
+sfnArn: sfn-arn
 
 options:
   chunkSize: 5
   multipartThreshold: 10
+  giantFileThreshold: 1024
   maxKeys: 1000
   messageBatchSize: 10
   finderDepth: 0

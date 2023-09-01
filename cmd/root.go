@@ -80,6 +80,7 @@ func initConfig() {
 
 	viper.SetDefault("options.chunkSize", dth.DefaultChunkSize)
 	viper.SetDefault("options.multipartThreshold", dth.DefaultMultipartThreshold)
+	viper.SetDefault("options.giantFileThreshold", dth.DefaultGiantFileThreshold)
 	viper.SetDefault("options.maxKeys", dth.DefaultMaxKeys)
 	viper.SetDefault("options.messageBatchSize", dth.DefaultMessageBatchSize)
 	viper.SetDefault("options.finderDepth", dth.DefaultFinderDepth)
@@ -108,10 +109,13 @@ func initConfig() {
 
 	viper.BindEnv("jobTableName", "JOB_TABLE_NAME")
 	viper.BindEnv("jobQueueName", "JOB_QUEUE_NAME")
+	viper.BindEnv("singlePartTableName", "SINGLE_PART_TABLE_NAME")
+	viper.BindEnv("sfnArn", "SFN_ARN")
 
 	viper.BindEnv("options.maxKeys", "MAX_KEYS")
 	viper.BindEnv("options.chunkSize", "CHUNK_SIZE")
 	viper.BindEnv("options.multipartThreshold", "MULTIPART_THRESHOLD")
+	viper.BindEnv("options.giantFileThreshold", "GIANT_FILE_THRESHOLD")
 	viper.BindEnv("options.messageBatchSize", "MESSAGE_BATCH_SIZE")
 	viper.BindEnv("options.finderDepth", "FINDER_DEPTH")
 	viper.BindEnv("options.finderNumber", "FINDER_NUMBER")
@@ -138,6 +142,7 @@ func initConfig() {
 	options := &dth.JobOptions{
 		ChunkSize:          viper.GetInt("options.chunkSize"),
 		MultipartThreshold: viper.GetInt("options.multipartThreshold"),
+		GiantFileThreshold: viper.GetInt("options.giantFileThreshold"),
 		MaxKeys:            viper.GetInt32("options.maxKeys"),
 		MessageBatchSize:   viper.GetInt("options.messageBatchSize"),
 		FinderDepth:        viper.GetInt("options.finderDepth"),
@@ -166,6 +171,8 @@ func initConfig() {
 		DestInCurrentAccount: viper.GetBool("destInCurrentAccount"),
 		JobTableName:         viper.GetString("jobTableName"),
 		JobQueueName:         viper.GetString("jobQueueName"),
+		SinglePartTableName:  viper.GetString("singlePartTableName"),
+		SfnArn:               viper.GetString("sfnArn"),
 		JobOptions:           options,
 	}
 

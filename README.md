@@ -59,7 +59,12 @@ destRegion: cn-north-1
 
 jobTableName: test-table
 jobQueueName: test-queue
+
+singlePartTableName: single-part-test-table
+sfnArn: sfn-arn
 ```
+
+The sfaArn is a Step Function created by [Data Transfer Hub S3 Plugin](https://github.com/awslabs/data-transfer-hub/blob/main/docs/S3_PLUGIN.md).
 
 By default, this tool will try to read a `config.yaml` in the same folder, if you create the configuration file in a different folder or with a different file name, please use extra option `--config xxx.yaml` to load your config file.
 

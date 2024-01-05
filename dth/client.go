@@ -47,10 +47,11 @@ type Client interface {
 	ListParts(ctx context.Context, key, uploadID *string) (parts map[int]*Part)
 	GetUploadID(ctx context.Context, key *string) (uploadID *string)
 	ListSelectedPrefixes(ctx context.Context, key *string) (prefixes []*string)
+	ListSelectedPrefixesFromThirdBucket(ctx context.Context, bucket *string, key *string) (prefixes []*string)
 
 	// WRITE
-	PutObject(ctx context.Context, key *string, body []byte, storageClass, acl *string, meta *Metadata) (etag *string, err error)
-	CreateMultipartUpload(ctx context.Context, key, storageClass, acl *string, meta *Metadata) (uploadID *string, err error)
+	PutObject(ctx context.Context, key *string, body []byte, storageClass, acl *string, sseType *string, sseKMSKeyId *string, meta *Metadata) (etag *string, err error)
+	CreateMultipartUpload(ctx context.Context, key, storageClass, acl *string, sseType *string, sseKMSKeyId *string, meta *Metadata) (uploadID *string, err error)
 	CompleteMultipartUpload(ctx context.Context, key, uploadID *string, parts []*Part) (etag *string, err error)
 	UploadPart(ctx context.Context, key *string, body []byte, uploadID *string, partNumber int) (etag *string, err error)
 	AbortMultipartUpload(ctx context.Context, key, uploadID *string) (err error)
@@ -164,6 +165,19 @@ func NewS3Client(ctx context.Context, bucket, prefix, prefixList, endpoint, regi
 		sourceType: sourceType,
 	}
 
+}
+
+// NewS3ClientWithEC2Role creates a S3Client instance which uses EC2 Role to access S3
+func NewS3ClientWithEC2Role(ctx context.Context, bucket, prefixList string) *S3Client {
+	cfg := loadDefaultConfig(ctx)
+
+	client := s3.NewFromConfig(cfg)
+
+	return &S3Client{
+			bucket:     bucket,
+			prefixList: prefixList,
+			client:     client,
+	}
 }
 
 // GetObject is a function to get (download) object from Amazon S3
@@ -459,8 +473,45 @@ func (c *S3Client) ListSelectedPrefixes(ctx context.Context, key *string) (prefi
 	return
 }
 
+// ListSelectedPrefixesFromThirdBucket is a function to list prefixes from a list file in a specific bucket.
+func (c *S3Client) ListSelectedPrefixesFromThirdBucket(ctx context.Context, bucket *string, key *string) (prefixes []*string) {
+	downloader := manager.NewDownloader(c.client)
+	getBuf := manager.NewWriteAtBuffer([]byte{})
+
+	input := &s3.GetObjectInput{
+			Bucket: bucket,
+			Key:    key,
+	}
+
+	downloadStart := time.Now()
+	log.Printf("Start downloading the Prefix List File from bucket: %s", *bucket)
+	_, err := downloader.Download(ctx, getBuf, input)
+	downloadEnd := time.Since(downloadStart)
+	if err != nil {
+			log.Printf("Error downloading the Prefix List File: %s", err)
+			return nil
+	} else {
+			log.Printf("Download the Prefix List File Completed in %v\n", downloadEnd)
+	}
+
+	start := time.Now()
+	prefixesValue := make([]string, 0)
+
+	for i, line := range strings.Split(string(getBuf.Bytes()), "\n") {
+			if len(line) > 0 {
+					prefixesValue = append(prefixesValue, line)
+					prefixes = append(prefixes, &prefixesValue[i])
+			}
+	}
+
+	end := time.Since(start)
+	log.Printf("Got %d prefixes from the customized list file in %v", len(prefixes), end)
+	return
+}
+
+
 // PutObject is a function to put (upload) an object to Amazon S3
-func (c *S3Client) PutObject(ctx context.Context, key *string, body []byte, storageClass, acl *string, meta *Metadata) (etag *string, err error) {
+func (c *S3Client) PutObject(ctx context.Context, key *string, body []byte, storageClass, acl *string, sseType *string, sseKMSKeyId *string, meta *Metadata) (etag *string, err error) {
 	// log.Printf("S3> Uploading object %s to bucket %s\n", key, c.bucket)
 
 	md5Bytes := md5.Sum(body)
@@ -481,6 +532,14 @@ func (c *S3Client) PutObject(ctx context.Context, key *string, body []byte, stor
 		StorageClass: types.StorageClass(*storageClass),
 		ACL:          types.ObjectCannedACL(*acl),
 	}
+	switch *sseType {
+	case "AES256":
+		input.ServerSideEncryption = types.ServerSideEncryptionAes256
+	case "AWS_KMS":
+		input.ServerSideEncryption = types.ServerSideEncryptionAwsKms
+		input.SSEKMSKeyId = sseKMSKeyId
+	}
+
 	if meta != nil {
 		input.ContentType = meta.ContentType
 		input.ContentEncoding = meta.ContentEncoding
@@ -522,7 +581,7 @@ func (c *S3Client) DeleteObject(ctx context.Context, key *string) (err error) {
 // CreateMultipartUpload is a function to initilize a multipart upload process.
 // This func returns an upload ID used to indicate the multipart upload.
 // All parts will be uploaded with this upload ID, after that, all parts by this ID will be combined to create the full object.
-func (c *S3Client) CreateMultipartUpload(ctx context.Context, key, storageClass, acl *string, meta *Metadata) (uploadID *string, err error) {
+func (c *S3Client) CreateMultipartUpload(ctx context.Context, key, storageClass, acl *string, sseType *string, sseKMSKeyId *string, meta *Metadata) (uploadID *string, err error) {
 	// log.Printf("S3> Create Multipart Upload for %s\n", *key)
 	if *acl == "" {
 		*acl = string(types.ObjectCannedACLBucketOwnerFullControl)
@@ -533,6 +592,13 @@ func (c *S3Client) CreateMultipartUpload(ctx context.Context, key, storageClass,
 		Key:          key,
 		StorageClass: types.StorageClass(*storageClass),
 		ACL:          types.ObjectCannedACL(*acl),
+	}
+	switch *sseType {
+	case "AES256":
+		input.ServerSideEncryption = types.ServerSideEncryptionAes256
+	case "AWS_KMS":
+		input.ServerSideEncryption = types.ServerSideEncryptionAwsKms
+		input.SSEKMSKeyId = sseKMSKeyId
 	}
 	if meta != nil {
 		input.ContentType = meta.ContentType

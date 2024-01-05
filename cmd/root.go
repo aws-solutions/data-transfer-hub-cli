@@ -72,11 +72,14 @@ func initConfig() {
 	viper.SetDefault("destStorageClass", "STANDARD")
 	viper.SetDefault("srcPrefix", "")
 	viper.SetDefault("srcPrefixList", "")
+	viper.SetDefault("srcPrefixListBucket", "")
 	viper.SetDefault("srcCredential", "")
 	viper.SetDefault("srcEndpoint", "")
 	viper.SetDefault("destPrefix", "")
 	viper.SetDefault("destCredential", "")
 	viper.SetDefault("destAcl", "bucket-owner-full-control")
+	viper.SetDefault("destSSEType", "None")
+	viper.SetDefault("destSSEKMSKeyId", "")
 
 	viper.SetDefault("options.chunkSize", dth.DefaultChunkSize)
 	viper.SetDefault("options.multipartThreshold", dth.DefaultMultipartThreshold)
@@ -92,6 +95,7 @@ func initConfig() {
 	viper.BindEnv("srcBucket", "SRC_BUCKET")
 	viper.BindEnv("srcPrefix", "SRC_PREFIX")
 	viper.BindEnv("srcPrefixList", "SRC_PREFIX_LIST")
+	viper.BindEnv("srcPrefixListBucket", "SRC_PREFIX_LIST_BUCKET")
 	viper.BindEnv("srcRegion", "SRC_REGION")
 	viper.BindEnv("srcEndpoint", "SRC_ENDPOINT")
 	viper.BindEnv("srcCredential", "SRC_CREDENTIALS")
@@ -106,6 +110,8 @@ func initConfig() {
 	viper.BindEnv("destInCurrentAccount", "DEST_IN_CURRENT_ACCOUNT")
 	viper.BindEnv("destStorageClass", "DEST_STORAGE_CLASS")
 	viper.BindEnv("destAcl", "DEST_ACL")
+	viper.BindEnv("destSSEType", "DEST_SSE_TYPE")
+	viper.BindEnv("destSSEKMSKeyId", "DEST_SSE_KMS_KEY_ID")
 
 	viper.BindEnv("jobTableName", "JOB_TABLE_NAME")
 	viper.BindEnv("jobQueueName", "JOB_QUEUE_NAME")
@@ -156,6 +162,7 @@ func initConfig() {
 		SrcBucket:            viper.GetString("srcBucket"),
 		SrcPrefix:            viper.GetString("srcPrefix"),
 		SrcPrefixList:        viper.GetString("srcPrefixList"),
+		SrcPrefixListBucket:  viper.GetString("srcPrefixListBucket"),
 		SrcRegion:            viper.GetString("srcRegion"),
 		SrcEndpoint:          viper.GetString("srcEndpoint"),
 		SrcCredential:        viper.GetString("srcCredential"),
@@ -168,6 +175,8 @@ func initConfig() {
 		DestCredential:       viper.GetString("destCredential"),
 		DestStorageClass:     viper.GetString("destStorageClass"),
 		DestAcl:              viper.GetString("destAcl"),
+		DestSSEType:          viper.GetString("destSSEType"),
+		DestSSEKMSKeyId:      viper.GetString("destSSEKMSKeyId"),
 		DestInCurrentAccount: viper.GetBool("destInCurrentAccount"),
 		JobTableName:         viper.GetString("jobTableName"),
 		JobQueueName:         viper.GetString("jobQueueName"),

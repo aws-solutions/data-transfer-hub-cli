@@ -54,10 +54,10 @@ type Job interface {
 // Finder is an implemenation of Job interface
 // Finder compares the differences of source and destination and sends the delta to SQS
 type Finder struct {
-	srcClient, desClient Client
-	sqs                  *SqsService
-	cfg                  *JobConfig
-	sfn                  *SfnService
+	srcClient, desClient, ec2RoleS3Client Client
+	sqs                                   *SqsService
+	cfg                                   *JobConfig
+	sfn                                   *SfnService
 }
 
 // Worker is an implemenation of Job interface
@@ -148,6 +148,8 @@ func NewFinder(ctx context.Context, cfg *JobConfig) (f *Finder) {
 	srcClient := NewS3Client(ctx, cfg.SrcBucket, cfg.SrcPrefix, cfg.SrcPrefixList, cfg.SrcEndpoint, cfg.SrcRegion, cfg.SrcType, srcCred)
 	desClient := NewS3Client(ctx, cfg.DestBucket, cfg.DestPrefix, "", "", cfg.DestRegion, "Amazon_S3", desCred)
 
+	ec2RoleS3Client := NewS3ClientWithEC2Role(ctx, cfg.SrcPrefixListBucket, cfg.SrcPrefixList)
+
 	if srcClient != nil {
 		srcClient.isSrcClient = true
 	}
@@ -160,11 +162,12 @@ func NewFinder(ctx context.Context, cfg *JobConfig) (f *Finder) {
 	DST_CRED = desCred
 
 	f = &Finder{
-		srcClient: srcClient,
-		desClient: desClient,
-		sfn:       sfn,
-		sqs:       sqs,
-		cfg:       cfg,
+		srcClient:       srcClient,
+		desClient:       desClient,
+		ec2RoleS3Client: ec2RoleS3Client,
+		sfn:             sfn,
+		sqs:             sqs,
+		cfg:             cfg,
 	}
 	return
 }
@@ -227,7 +230,9 @@ func (f *Finder) Run(ctx context.Context) {
 		log.Printf("Enable Payer Request Mode")
 	}
 
-	if len(f.cfg.SrcPrefixList) > 0 {
+	if f.cfg.SrcPrefixListBucket != "" && len(f.cfg.SrcPrefixList) > 0 {
+		prefixes = f.ec2RoleS3Client.ListSelectedPrefixesFromThirdBucket(ctx, &f.cfg.SrcPrefixListBucket, &f.cfg.SrcPrefixList)
+	} else if len(f.cfg.SrcPrefixList) > 0 {
 		prefixes = f.srcClient.ListSelectedPrefixes(ctx, &f.cfg.SrcPrefixList)
 	} else {
 		prefixes = f.srcClient.ListCommonPrefixes(ctx, f.cfg.FinderDepth, f.cfg.MaxKeys)
@@ -843,7 +848,9 @@ func (w *Worker) generateMultiPartTransferJobs(ctx context.Context, obj *Object,
 			meta = w.srcClient.HeadObject(ctx, &obj.Key)
 		}
 
-		uploadID, err = w.desClient.CreateMultipartUpload(ctx, destKey, &w.cfg.DestStorageClass, &w.cfg.DestAcl, meta)
+		uploadID, err = w.desClient.CreateMultipartUpload(
+			ctx, destKey, &w.cfg.DestStorageClass, &w.cfg.DestAcl, &w.cfg.DestSSEType, &w.cfg.DestSSEKMSKeyId, meta,
+		)
 		if err != nil {
 			log.Printf("Failed to create upload ID - %s for %s\n", err.Error(), *destKey)
 			return 0, err
@@ -949,7 +956,9 @@ func (w *Worker) migrateBigFile(ctx context.Context, obj *Object, destKey *strin
 			meta = w.srcClient.HeadObject(ctx, &obj.Key)
 		}
 
-		uploadID, err = w.desClient.CreateMultipartUpload(ctx, destKey, &w.cfg.DestStorageClass, &w.cfg.DestAcl, meta)
+		uploadID, err = w.desClient.CreateMultipartUpload(
+			ctx, destKey, &w.cfg.DestStorageClass, &w.cfg.DestAcl, &w.cfg.DestSSEType, &w.cfg.DestSSEKMSKeyId, meta,
+		)
 		if err != nil {
 			log.Printf("Failed to create upload ID - %s for %s\n", err.Error(), *destKey)
 			return &TransferResult{
@@ -1100,7 +1109,10 @@ func (w *Worker) transfer(ctx context.Context, obj *Object, destKey *string, sta
 
 	} else {
 		log.Printf("----->Uploading %d Bytes to %s/%s\n", chunkSize, w.cfg.DestBucket, *destKey)
-		etag, err = w.desClient.PutObject(ctx, destKey, body, &w.cfg.DestStorageClass, &w.cfg.DestAcl, meta)
+		etag, err = w.desClient.PutObject(
+			ctx, destKey, body, &w.cfg.DestStorageClass, &w.cfg.DestAcl,
+			&w.cfg.DestSSEType, &w.cfg.DestSSEKMSKeyId, meta,
+		)
 	}
 
 	body = nil // release memory

@@ -495,7 +495,7 @@ func (c *S3Client) ListSelectedPrefixesFromThirdBucket(ctx context.Context, buck
 	}
 
 	start := time.Now()
-	prefixesValue := make([]string, 0)
+	prefixesValue := make([]string, 0, 100000000)
 
 	for i, line := range strings.Split(string(getBuf.Bytes()), "\n") {
 			if len(line) > 0 {

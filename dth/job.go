@@ -107,29 +107,26 @@ func getCredentials(ctx context.Context, param string, inCurrentAccount bool, sm
 		noSignRequest: false,
 	}
 
-	// No need to do anything if inCurrentAccount is true
-	if !inCurrentAccount {
-		if param == "" {
-			// no credential is required.
-			cred.noSignRequest = true
-		} else {
-			credStr := sm.GetSecret(ctx, &param)
-			if credStr != nil {
-				credMap := make(map[string]string)
-				err := json.Unmarshal([]byte(*credStr), &credMap)
-				if err != nil {
-					log.Printf("Warning - Unable to parse the credentials string, please make sure the it is a valid json format. - %s\n", err.Error())
-				} else {
-					cred.accessKey = credMap["access_key_id"]
-					cred.secretKey = credMap["secret_access_key"]
-				}
-				// log.Println(*credStr)
-				// log.Println(credMap)
-			} else {
-				log.Printf("Credential parameter %s ignored, use default configuration\n", param)
-			}
-		}
-	}
+    if param == "" {
+        // no credential is required if not in current account
+        cred.noSignRequest = !inCurrentAccount
+    } else {
+        credStr := sm.GetSecret(ctx, &param)
+        if credStr != nil {
+            credMap := make(map[string]string)
+            err := json.Unmarshal([]byte(*credStr), &credMap)
+            if err != nil {
+                log.Printf("Warning - Unable to parse the credentials string, please make sure the it is a valid json format. - %s\n", err.Error())
+            } else {
+                cred.accessKey = credMap["access_key_id"]
+                cred.secretKey = credMap["secret_access_key"]
+            }
+            // log.Println(*credStr)
+            // log.Println(credMap)
+        } else {
+            log.Printf("Credential parameter %s ignored, use default configuration\n", param)
+        }
+    }
 	return cred
 }
 

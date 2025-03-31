@@ -272,7 +272,7 @@ func (c *S3Client) listObjectFn(ctx context.Context, continuationToken, prefix, 
 		input = &s3.ListObjectsV2Input{
 			Bucket:       &c.bucket,
 			Prefix:       prefix,
-			MaxKeys:      maxKeys,
+			MaxKeys: 	  aws.Int32(maxKeys),
 			Delimiter:    delimiter,
 			EncodingType: "url",
 			RequestPayer: types.RequestPayerRequester,
@@ -281,7 +281,7 @@ func (c *S3Client) listObjectFn(ctx context.Context, continuationToken, prefix, 
 		input = &s3.ListObjectsV2Input{
 			Bucket:       &c.bucket,
 			Prefix:       prefix,
-			MaxKeys:      maxKeys,
+			MaxKeys: 	  aws.Int32(maxKeys),
 			Delimiter:    delimiter,
 			EncodingType: "url",
 		}
@@ -298,7 +298,7 @@ func (c *S3Client) listObjectFn(ctx context.Context, continuationToken, prefix, 
 		return nil, err
 	}
 
-	if output.IsTruncated {
+	if output.IsTruncated != nil && *output.IsTruncated {
 		*continuationToken = *output.NextContinuationToken
 	} else {
 		*continuationToken = "End"
@@ -398,7 +398,7 @@ func (c *S3Client) ListObjects(ctx context.Context, continuationToken, prefix *s
 		}
 		result = append(result, &Object{
 			Key:  escapedPrefix,
-			Size: obj.Size,
+			Size: *obj.Size,
 		})
 	}
 
@@ -634,7 +634,7 @@ func (c *S3Client) UploadPart(ctx context.Context, key *string, body []byte, upl
 		Bucket:     &c.bucket,
 		Key:        key,
 		Body:       reader,
-		PartNumber: int32(partNumber),
+		PartNumber: aws.Int32(int32(partNumber)),
 		UploadId:   uploadID,
 		ContentMD5: &contentMD5,
 	}
@@ -662,7 +662,7 @@ func (c *S3Client) CompleteMultipartUpload(ctx context.Context, key, uploadID *s
 
 	for i, part := range parts {
 		cp := types.CompletedPart{
-			PartNumber: int32(part.partNumber),
+			PartNumber: aws.Int32(int32(part.partNumber)),
 			ETag:       part.etag,
 		}
 		completedPart[i] = cp
@@ -698,7 +698,7 @@ func (c *S3Client) ListParts(ctx context.Context, key, uploadID *string) (parts 
 		Bucket:   &c.bucket,
 		Key:      key,
 		UploadId: uploadID,
-		MaxParts: 1000,
+		MaxParts: aws.Int32(1000),
 	}
 
 	parts = make(map[int]*Part, 10000)
@@ -713,12 +713,12 @@ func (c *S3Client) ListParts(ctx context.Context, key, uploadID *string) (parts 
 		for _, part := range output.Parts {
 			// log.Printf("Found Part %d - etag %s", part.PartNumber, *part.ETag)
 			etag := strings.Trim(*part.ETag, "\"")
-			parts[int(part.PartNumber)] = &Part{
-				partNumber: int(part.PartNumber),
+			parts[int(*part.PartNumber)] = &Part{
+				partNumber: int(*part.PartNumber),
 				etag:       &etag,
 			}
 		}
-		if !output.IsTruncated {
+		if output.IsTruncated == nil || !*output.IsTruncated {
 			break
 		}
 		input.PartNumberMarker = output.NextPartNumberMarker
